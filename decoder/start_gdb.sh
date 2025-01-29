@@ -1,0 +1,1 @@
+docker run --rm -it  -v ./build_out:/out -v ./src:/src -v ./openocd.gdb:/openocd.gdb --workdir=/root --entrypoint /bin/bash decoder -c " cp -r /out/* /root/ && cp -r /src /root/src && gdb-multiarch --command=/openocd.gdb max78000.elf"
