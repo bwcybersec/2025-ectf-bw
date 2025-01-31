@@ -1,7 +1,7 @@
 # Protocol
 
 All subscription updates and frames sent to the device are encrypted using the 
-XChacha20-Poly1305 algorithm. All encrypted messages have the following header, 
+XChaCha20-Poly1305 algorithm. All encrypted messages have the following header, 
 prefixed before the encrypted packet payload.
 
 | Field           | Size (in bits) |
