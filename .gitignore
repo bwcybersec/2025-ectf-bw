@@ -338,3 +338,5 @@ msdk/
 secrets/
 *.secrets
 *.subscription
+
+decoder/target_docker/

@@ -32,6 +32,9 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --de
     echo '. "$HOME/.cargo/env"' >> $HOME/.bashrc && \
     cargo install cargo-binutils
 
+# BW: Setup GEF
+RUN bash -c "$(curl -fsSL https://gef.blah.cat/sh)"
+
 WORKDIR /decoder
 
 # ENTRYPOINT ["bash", "-c", "make release DECODER_ID=${DECODER_ID} && cp build/max78000.elf build/max78000.bin /out"]

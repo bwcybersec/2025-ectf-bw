@@ -1,0 +1,172 @@
+use cortex_m::register::basepri::read;
+use cortex_m_semihosting::{dbg, heprintln};
+use hal::flc::{FlashError, Flc};
+
+use crate::host_comms::DecoderError;
+
+use core::fmt::Debug;
+
+pub const STORAGE_MAX: usize = 4096;
+pub const STORAGE_MAX_U32: u32 = STORAGE_MAX as u32;
+
+const PERSIST_BASE_ADDR: u32 = 0x10044000;
+const DATA_LEN_ADDR: u32 = PERSIST_BASE_ADDR + 4;
+const DATA_BASE_ADDR: u32 = DATA_LEN_ADDR + 4;
+
+const FLASH_INITIALIZED_MAGIC: u32 = 0x4d494b55; 
+
+#[derive(Debug)]
+pub enum DecoderStorageReadError {
+    /// This Error implies that the length value in flash is invalid,
+    FlashLengthTooLarge,
+    /// This error means that we got an error from the flash library.
+    /// This is probably a logic bug.
+    FlashError(FlashError),
+}
+
+impl From<FlashError> for DecoderStorageReadError {
+    fn from(value: FlashError) -> Self {
+        Self::FlashError(value)
+    }
+}
+
+#[derive(Debug)]
+pub enum DecoderStorageWriteError {
+    /// This error means that we got an error from the flash library.
+    /// This is probably a logic bug.
+    FlashError(FlashError)
+}
+
+impl From<FlashError> for DecoderStorageWriteError {
+    fn from(value: FlashError) -> Self {
+        Self::FlashError(value)
+    }
+}
+
+impl From<DecoderStorageWriteError> for DecoderError {
+    fn from(value: DecoderStorageWriteError) -> Self {
+        Self::SavingFailed(value)
+    }
+}
+pub struct DecoderStorage { 
+    flc: Flc,
+    buf: heapless::Vec<u8, STORAGE_MAX>
+}
+
+impl Debug for DecoderStorage {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("DecoderStorage").finish_non_exhaustive()
+    }
+}
+
+impl DecoderStorage {
+    pub fn init(flc: Flc) -> Result<DecoderStorage, DecoderStorageReadError> {
+
+        let mut storage = Self {flc, buf: heapless::Vec::new()};
+
+        let read_magic = match storage.flc.read_32(PERSIST_BASE_ADDR) {
+            Ok(x) => x,
+            Err(err) => return Err(DecoderStorageReadError::FlashError(err)),
+        };
+
+        if read_magic != FLASH_INITIALIZED_MAGIC {
+            // unwrap is okay here, we know the address is fine.
+            // heprintln!("Storage is not initialized, resetting.");
+            storage.reset_storage().unwrap();
+        } else {
+            // heprintln!("Storage is initialized, reading into buffer.");
+            storage.fill_buffer()?;
+        }
+
+        Ok(storage)
+    }
+
+    pub fn reset_storage(&mut self) -> Result<(), DecoderStorageWriteError> {
+        self.erase_page();
+        self.flc.write_128(PERSIST_BASE_ADDR, &[FLASH_INITIALIZED_MAGIC, 0, 0xFFFFFFFF, 0xFFFFFFFF])?;
+        self.buf.clear();
+        Ok(())
+    }
+
+    pub fn fill_buffer(&mut self) -> Result<(), DecoderStorageReadError> {
+        let length = self.flc.read_32(DATA_LEN_ADDR).unwrap();
+        if length > STORAGE_MAX_U32 {
+            return Err(DecoderStorageReadError::FlashLengthTooLarge);
+        }
+        
+        // heprintln!("clearing buffer");
+        self.buf.clear();
+
+        let mut cursor = DATA_BASE_ADDR;
+        // dbg!(cursor);
+        loop {
+            let bytes_left = (length-(cursor-DATA_BASE_ADDR)) as usize;
+            // dbg!(bytes_left);
+            if bytes_left >= 4 {
+                let read = self.flc.read_32(cursor).expect("STORAGE_MAX is less than the page size");
+                self.buf.extend(read.to_ne_bytes());
+                cursor += 4;
+            } else if bytes_left == 0 {
+                break; // This skips a flash read.
+            } else {
+                let read = self.flc.read_32(cursor).expect("STORAGE_MAX is less than the page size");
+                let read_bytes = &read.to_ne_bytes()[0..bytes_left];
+                match self.buf.extend_from_slice(read_bytes) {
+                    Ok(_) => {},
+                    Err(_) => {},
+                };
+                break;
+            }
+        }
+        
+        Ok(())
+    }
+
+    pub fn flush_buffer(&self) -> Result<(), DecoderStorageWriteError> {
+        self.erase_page();
+
+        let mut cursor = PERSIST_BASE_ADDR;
+        let mut u32s_to_write= [FLASH_INITIALIZED_MAGIC, self.buf.len() as u32, 0xDEADBEEF, 0xDEADBEEF];
+
+        let mut i: usize = 2;
+
+        let chunks = self.buf.array_chunks::<4>();
+        let remainder = chunks.remainder();
+        for chunk in chunks {
+            u32s_to_write[i]= u32::from_ne_bytes(*chunk);
+            i += 1;
+
+            if i == u32s_to_write.len() {
+                self.flc.write_128(cursor, &u32s_to_write)?;
+                
+                // move the cursor by 4 u32s.
+                cursor += 4 * 4;
+                i = 0;
+            }
+        }
+
+        let mut final_u32: [u8; 4] = [0x41;4];
+        
+        for (i, b) in final_u32.iter_mut().zip(remainder) {
+            *i = *b;
+        }
+        
+        u32s_to_write[i] = u32::from_ne_bytes(final_u32);
+        self.flc.write_128(cursor, &u32s_to_write)?;
+        
+        Ok(())
+    }
+
+
+    fn erase_page(&self) { 
+        // Safety: this page is reserved in memory.x, and thus cannot be the
+        // page that we are running code from.
+        unsafe {
+            self.flc.erase_page(PERSIST_BASE_ADDR).unwrap();
+        }
+    }
+    
+    pub fn get_buf_mut(&mut self) -> &mut heapless::Vec<u8, STORAGE_MAX> {
+        &mut self.buf
+    }
+}
