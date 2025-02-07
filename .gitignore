@@ -150,7 +150,6 @@ fabric.properties
 # modules.xml
 # .idea/misc.xml
 # *.ipr
-
 # Sonarlint plugin
 # https://plugins.jetbrains.com/plugin/7973-sonarlint
 .idea/**/sonarlint/
@@ -338,5 +337,8 @@ msdk/
 secrets/
 *.secrets
 *.subscription
+
+docs/mermaid-filter.err
+docs/designdoc.*
 
 decoder/target_docker/
