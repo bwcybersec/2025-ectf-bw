@@ -1,8 +1,12 @@
 #![no_std]
 #![no_main]
+// The only reason that this is unstable is because bikeshedding about the zero
+// case.
+#![feature(array_chunks)]
 
 extern crate alloc;
-use alloc::format;
+use flash::DecoderStorage;
+use hal::flc::Flc;
 
 use core::ptr::addr_of_mut;
 
@@ -12,12 +16,15 @@ pub use hal::entry;
 pub use hal::pac;
 
 use host_comms::DecoderConsole;
-use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch panics
+
+use panic_halt as _;
+// use panic_semihosting as _;
 
 use embedded_alloc::LlffHeap as Heap;
 
 mod cmd_logic;
 mod decoder;
+mod flash;
 mod host_comms;
 
 #[global_allocator]
@@ -25,7 +32,7 @@ static HEAP: Heap = Heap::empty();
 
 #[entry]
 fn main() -> ! {
-    // Allocate a very silly 8k of heap for formatting error strings and stuff :)
+    // Allocate a very silly 8k of heap for formatting error and debug strings :)
     {
         use core::mem::MaybeUninit;
         const HEAP_SIZE: usize = 8192;
@@ -60,8 +67,9 @@ fn main() -> ! {
         .parity(hal::uart::ParityBit::None)
         .build();
 
-    uart.write_bytes(b"Hello, world!\r\n");
+    // uart.write_bytes(b"Hello, world!\r\n");
 
+    // heprintln!("LEDs should be on");
     // Initialize the GPIO2 peripheral
     let pins = hal::gpio::Gpio2::new(p.gpio2, &mut gcr.reg).split();
     // Enable output mode for the RGB LED pins
@@ -75,11 +83,20 @@ fn main() -> ! {
     led_b.set_power_vddioh();
 
     led_r.set_high();
-    led_g.set_high();
+    // led_g.set_high();
     led_b.set_high();
 
-    let mut decoder = Decoder::new();
+    let flc = Flc::new(p.flc, clks.sys_clk);
+
+    // heprintln!("Initializing decoder storage.");
+    let mut storage = DecoderStorage::init(flc).unwrap();
+
+    // heprintln!("Initializing decoder.");
+    let mut decoder: Decoder<'_> = Decoder::new(&mut storage);
+    // dbg!(&decoder);
+
     let mut console = DecoderConsole(uart);
+
     loop {
         if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder) {
             err.write_to_console(&console);

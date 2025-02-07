@@ -1,8 +1,12 @@
+use core::fmt::Display;
+
 use alloc::format;
-use arrayvec::ArrayVec;
 use hal::{pac::Uart0, uart::BuiltUartPeripheral};
 
-use crate::decoder::{Decoder, Subscription};
+use crate::{
+    decoder::{Decoder, Subscription},
+    flash::DecoderStorageWriteError,
+};
 
 #[derive(PartialEq, Eq)]
 pub enum DecoderMessageType {
@@ -13,34 +17,52 @@ pub enum DecoderMessageType {
 
 #[derive(Debug)]
 pub enum DecoderError {
+    /// Decoder expected an ACK in the protocol, but got something else.
     ExpectedAckButGot(u8),
+    /// Decoder has run out of subscription space.
     NoMoreSubscriptionSpace,
+    /// Decoder was sent a frame that claims to be more than 64 bytes
     FrameTooLarge(u16),
+    /// Decoder does not have a valid subscription for the given frame.
     NoSubscription(u32),
+    /// Given timestamp does fall within the subscription time window.
     SubscriptionTimeMismatch(u32, u64),
+    /// Serialization failed while trying to write subscription update to flash.
+    SerializationFailed(postcard::Error),
+    /// Saving the serialized data to flash failed
+    SavingFailed(DecoderStorageWriteError),
+}
+
+impl Display for DecoderError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::ExpectedAckButGot(byte) => {
+                write!(f, "Expected ACK but got unexpected byte {}", byte)
+            }
+            Self::NoMoreSubscriptionSpace => {
+                write!(f, "Attempted to add a subscription, but subscription space is full")
+            }
+            Self::FrameTooLarge(frame_size) => write!(f,
+                "Was asked to decode a frame of {}, which is larger than 64",
+                frame_size
+            ),
+            Self::NoSubscription(channel_id) => write!(f,
+                "Was asked to decode a frame for channel {}, but we have no subscription for that channel",
+                 channel_id
+            ),
+            Self::SubscriptionTimeMismatch(channel_id, timestamp) => write!(f,
+                "Was asked to decode a frame for channel {} with timestamp {}, but that timestamp is invalid for our subscription.", channel_id, timestamp
+            ),
+            Self::SerializationFailed(err) => write!(f, "Attempted to serialize subscription updates for flash, and failed with error {err}"),
+            Self::SavingFailed(err) => write!(f, "Attempted to save subscription updates to flash, and failed with error {err:?}")
+         }
+    }
 }
 
 impl DecoderError {
     pub fn write_to_console<RX, TX>(&self, console: &DecoderConsole<RX, TX>) {
-        let message = match self {
-            Self::ExpectedAckButGot(byte) => {
-                &format!("Expected ACK but got unexpected byte {}", byte)
-            }
-            Self::NoMoreSubscriptionSpace => {
-                "Attempted to add a subscription, but subscription space is full"
-            }
-            Self::FrameTooLarge(frame_size) => &format!(
-                "Was asked to decode a frame of {}, which is larger than 64",
-                frame_size
-            ),
-            Self::NoSubscription(channel_id) => &format!(
-                "Was asked to decode a frame for channel {}, but we have no subscription for that channel",
-                 channel_id
-            ),
-            Self::SubscriptionTimeMismatch(channel_id, timestamp) => &format!(
-                "Was asked to decode a frame for channel {} with timestamp {}, but that timestamp is invalid for our subscription.", channel_id, timestamp
-            )
-        };
+        let message = format!("{self}");
+        // heprintln!("{message}");
         let _ = console.print_error(&message);
     }
 }
@@ -163,10 +185,12 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         match sub {
             Some(sub) => {
                 if timestamp < sub.start_time || sub.end_time > timestamp {
-                    return Err(DecoderError::SubscriptionTimeMismatch(channel_id, timestamp))
+                    return Err(DecoderError::SubscriptionTimeMismatch(
+                        channel_id, timestamp,
+                    ));
                 }
 
-                let mut frame_buf: ArrayVec<u8, 64> = ArrayVec::new();
+                let mut frame_buf: heapless::Vec<u8, 64> = heapless::Vec::new();
                 let frame = &mut frame_buf[0..frame_length as usize];
                 reader.read_bytes(frame);
                 reader.finish_payload();
@@ -175,14 +199,14 @@ impl<RX, TX> DecoderConsole<RX, TX> {
                 // Packet header
                 self.write_byte(b'%'); // magic byte
                 self.write_byte(b'D'); // message type
-                self.write_u16(frame_length); // message length   
+                self.write_u16(frame_length); // message length
 
                 let mut writer: DecoderPayloadWriter<'_, RX, TX> = DecoderPayloadWriter::new(&self);
                 writer.write_bytes(frame)?;
                 writer.finish_payload()?;
 
                 Ok(())
-            },
+            }
             None => Err(DecoderError::NoSubscription(channel_id)),
         }
     }
@@ -211,6 +235,13 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         payload.finish_payload()?;
 
         Ok(())
+    }
+
+    pub fn send_empty_payload(&self, msg_type: u8) -> Result<(), DecoderError> {
+        self.write_byte(b'%');
+        self.write_byte(msg_type);
+        self.write_u16(0);
+        self.read_ack()
     }
 
     // internal helpers

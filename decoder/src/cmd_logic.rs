@@ -40,7 +40,12 @@ pub fn run_command<RX, TX>(
                     console.write_ack();
 
                     let sub = console.read_subscription()?;
+
+                    console.write_ack();
+
                     decoder.register_subscription(sub)?;
+
+                    console.send_empty_payload(b'S')?;
                 }
                 DecoderMessageType::Decode => {
                     // This logic is done inside of DecoderConsole
