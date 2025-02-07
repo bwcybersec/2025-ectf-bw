@@ -1,10 +1,12 @@
 use core::fmt::Display;
 
 use alloc::format;
-use cortex_m_semihosting::heprintln;
 use hal::{pac::Uart0, uart::BuiltUartPeripheral};
 
-use crate::{decoder::{Decoder, Subscription}, flash::DecoderStorageWriteError};
+use crate::{
+    decoder::{Decoder, Subscription},
+    flash::DecoderStorageWriteError,
+};
 
 #[derive(PartialEq, Eq)]
 pub enum DecoderMessageType {
@@ -28,7 +30,7 @@ pub enum DecoderError {
     /// Serialization failed while trying to write subscription update to flash.
     SerializationFailed(postcard::Error),
     /// Saving the serialized data to flash failed
-    SavingFailed(DecoderStorageWriteError)
+    SavingFailed(DecoderStorageWriteError),
 }
 
 impl Display for DecoderError {
@@ -59,7 +61,7 @@ impl Display for DecoderError {
 
 impl DecoderError {
     pub fn write_to_console<RX, TX>(&self, console: &DecoderConsole<RX, TX>) {
-        let message= format!("{self}");
+        let message = format!("{self}");
         // heprintln!("{message}");
         let _ = console.print_error(&message);
     }
@@ -183,7 +185,9 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         match sub {
             Some(sub) => {
                 if timestamp < sub.start_time || sub.end_time > timestamp {
-                    return Err(DecoderError::SubscriptionTimeMismatch(channel_id, timestamp))
+                    return Err(DecoderError::SubscriptionTimeMismatch(
+                        channel_id, timestamp,
+                    ));
                 }
 
                 let mut frame_buf: heapless::Vec<u8, 64> = heapless::Vec::new();
@@ -195,14 +199,14 @@ impl<RX, TX> DecoderConsole<RX, TX> {
                 // Packet header
                 self.write_byte(b'%'); // magic byte
                 self.write_byte(b'D'); // message type
-                self.write_u16(frame_length); // message length   
+                self.write_u16(frame_length); // message length
 
                 let mut writer: DecoderPayloadWriter<'_, RX, TX> = DecoderPayloadWriter::new(&self);
                 writer.write_bytes(frame)?;
                 writer.finish_payload()?;
 
                 Ok(())
-            },
+            }
             None => Err(DecoderError::NoSubscription(channel_id)),
         }
     }
@@ -240,7 +244,6 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         self.read_ack()
     }
 
-
     // internal helpers
 
     // reads
@@ -277,7 +280,6 @@ impl<RX, TX> DecoderConsole<RX, TX> {
     fn write_u64(&self, val: u64) {
         self.0.write_bytes(&val.to_le_bytes())
     }
-    
 }
 
 /// This struct represents a payload being written to the wire.

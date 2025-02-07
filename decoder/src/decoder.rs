@@ -1,17 +1,16 @@
-use serde::{Serialize, Deserialize};
 use postcard::{from_bytes, to_extend};
+use serde::{Deserialize, Serialize};
 
 use crate::{flash::DecoderStorage, host_comms::DecoderError};
 
 const MAX_SUBSCRIPTION_COUNT: usize = 8;
-
 
 /// This struct represents the concept of the decoder. It will decode frames
 /// that it has a valid subscription for, and can register more subscriptions.
 #[derive(Debug)]
 pub struct Decoder<'a> {
     subscriptions: [Option<Subscription>; MAX_SUBSCRIPTION_COUNT],
-    storage: &'a mut DecoderStorage
+    storage: &'a mut DecoderStorage,
 }
 
 impl<'a> Decoder<'a> {
@@ -20,14 +19,15 @@ impl<'a> Decoder<'a> {
 
         {
             let buf = storage.get_buf_mut();
-            let subscriptions: [Option<Subscription>; MAX_SUBSCRIPTION_COUNT] = match from_bytes(buf) {
-                Ok(res) => res,
-                Err(_) => Default::default(),
-            };
+            let subscriptions: [Option<Subscription>; MAX_SUBSCRIPTION_COUNT] =
+                match from_bytes(buf) {
+                    Ok(res) => res,
+                    Err(_) => Default::default(),
+                };
 
             decoder = Self {
                 subscriptions,
-                storage
+                storage,
             };
         }
 
@@ -73,24 +73,22 @@ impl<'a> Decoder<'a> {
         let buf = self.storage.get_buf_mut();
         buf.clear();
         {
-            let buf = ExtendableHeaplessVecMut {the_reference: buf};
+            let buf = ExtendableHeaplessVecMut { the_reference: buf };
             match to_extend(&self.subscriptions, buf) {
-                Ok(_) => {},
-                Err(err) => {return Err(DecoderError::SerializationFailed(err))},
-            };    
+                Ok(_) => {}
+                Err(err) => return Err(DecoderError::SerializationFailed(err)),
+            };
         }
 
         self.storage.flush_buffer()?;
 
         Ok(())
-    }        
-
-
+    }
 }
 
 // Sigh.
 struct ExtendableHeaplessVecMut<'why, T, const N: usize> {
-    the_reference: &'why mut heapless::Vec<T, N>
+    the_reference: &'why mut heapless::Vec<T, N>,
 }
 
 impl<T, const N: usize> Extend<T> for ExtendableHeaplessVecMut<'_, T, N> {
@@ -104,5 +102,5 @@ impl<T, const N: usize> Extend<T> for ExtendableHeaplessVecMut<'_, T, N> {
 pub struct Subscription {
     pub channel_id: u32,
     pub start_time: u64,
-    pub end_time: u64
+    pub end_time: u64,
 }

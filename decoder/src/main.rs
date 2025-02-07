@@ -1,13 +1,10 @@
 #![no_std]
 #![no_main]
-
 // The only reason that this is unstable is because bikeshedding about the zero
 // case.
 #![feature(array_chunks)]
 
 extern crate alloc;
-use cortex_m_semihosting::dbg;
-use cortex_m_semihosting::heprintln;
 use flash::DecoderStorage;
 use hal::flc::Flc;
 
@@ -20,8 +17,6 @@ pub use hal::pac;
 
 use host_comms::DecoderConsole;
 
-
-
 use panic_halt as _;
 // use panic_semihosting as _;
 
@@ -29,8 +24,8 @@ use embedded_alloc::LlffHeap as Heap;
 
 mod cmd_logic;
 mod decoder;
+mod flash;
 mod host_comms;
-mod flash; 
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
