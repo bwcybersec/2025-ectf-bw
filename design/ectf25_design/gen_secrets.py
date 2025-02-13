@@ -12,6 +12,8 @@ Copyright: Copyright (c) 2025 The MITRE Corporation
 
 import argparse
 import json
+import os
+from base64 import b64encode
 from pathlib import Path
 
 from loguru import logger
@@ -35,9 +37,14 @@ def gen_secrets(channels: list[int]) -> bytes:
     # Create the secrets object
     # You can change this to generate any secret material
     # The secrets file will never be shared with attackers
+
     secrets = {
+
         "channels": channels,
-        "some_secrets": "EXAMPLE",
+        "deployment_key": os.urandom(32).hex(),
+        "channel_keys": {
+            channel: os.urandom(32).hex() for channel in channels
+        }
     }
 
     # NOTE: if you choose to use JSON for your file type, you will not be able to
