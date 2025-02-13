@@ -39,12 +39,12 @@ def gen_secrets(channels: list[int]) -> bytes:
     # The secrets file will never be shared with attackers
 
     secrets = {
-
         "channels": channels,
         "deployment_key": os.urandom(32).hex(),
         "channel_keys": {
             channel: os.urandom(32).hex() for channel in channels
-        }
+        },
+        "salt": os.urandom(32).hex()
     }
 
     # NOTE: if you choose to use JSON for your file type, you will not be able to
