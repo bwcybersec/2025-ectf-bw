@@ -26,6 +26,7 @@ mod cmd_logic;
 mod decoder;
 mod flash;
 mod host_comms;
+mod crypto;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();

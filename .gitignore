@@ -342,3 +342,4 @@ docs/mermaid-filter.err
 docs/designdoc.*
 
 decoder/target_docker/
+decoder/src/gen_constants.rs
