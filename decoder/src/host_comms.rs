@@ -126,6 +126,10 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         let sub_count = subscriptions.clone().count();
         let payload_len = (sub_count * (4 + 8 + 8)) as u16;
 
+        subscriptions.clone().for_each(|x| {
+            self.print_debug(&format!("{x:?}"));
+        });
+
         self.write_byte(b'%'); // magic byte
         self.write_byte(b'L'); // message type
         self.write_u16(payload_len + 4); // message type
@@ -156,9 +160,9 @@ impl<RX, TX> DecoderConsole<RX, TX> {
 
         let _decoder_id = reader.read_u32();
         // TODO: Replace this with a secure implementation
-        let channel_id = reader.read_u32();
         let start_time = reader.read_u64();
         let end_time = reader.read_u64();
+        let channel_id = reader.read_u32();
 
         Ok(Subscription {
             channel_id,
