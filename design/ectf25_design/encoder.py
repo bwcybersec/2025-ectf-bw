@@ -29,9 +29,11 @@ class Encoder:
         # Load the json of the secrets file
         secrets = json.loads(secrets)
 
-        # Load the example secrets for use in Encoder.encode
-        # This will be "EXAMPLE" in the reference design"
-        self.some_secrets = secrets["some_secrets"]
+        # # Load the example secrets for use in Encoder.encode
+        # # This will be "EXAMPLE" in the reference design"
+        # self.some_secrets = secrets["some_secrets"]
+        self.channel_0_key = secrets["channel_0_key"]
+        self.channel_keys = secrets["channel_keys"]
 
     def encode(self, channel: int, frame: bytes, timestamp: int) -> bytes:
         """The frame encoder function

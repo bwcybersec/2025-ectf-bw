@@ -23,10 +23,10 @@ use panic_halt as _;
 use embedded_alloc::LlffHeap as Heap;
 
 mod cmd_logic;
+mod crypto;
 mod decoder;
 mod flash;
 mod host_comms;
-mod crypto;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();

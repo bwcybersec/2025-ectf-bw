@@ -23,6 +23,7 @@ use sha2::Sha256;
 struct Secrets {
     deployment_key: String,
     salt: String,
+    channel_0_key: String,
 }
 
 fn main() {
@@ -55,16 +56,26 @@ fn main() {
     // Import secrets
     let secrets_file = File::open("/secrets/secrets.json").expect("couldn't read secrets");
     let secrets: Secrets = serde_json::from_reader(secrets_file).expect("couldn't parse secrets");
-    let deployment_key = hex::decode(secrets.deployment_key).expect("couldn't unhex deployment_key");
+    let deployment_key =
+        hex::decode(secrets.deployment_key).expect("couldn't unhex deployment_key");
     let salt = hex::decode(secrets.salt).expect("couldn't unhex salt");
     let decoder_id = var("DECODER_ID").expect("DECODER_ID env var was not present");
     let info = hex::decode(&decoder_id[2..]).expect("couldn't unhex the decoder id");
+    let channel_0_key = hex::decode(secrets.channel_0_key).expect("couldn't unhex channel_0_key");
 
+    // Derive the decoder key
     let hk: Hkdf<_, _> = Hkdf::<Sha256>::new(Some(&salt[..]), &deployment_key);
     let mut decoder_key: [u8; 32] = [0; 32];
-    
-    hk.expand(&info, &mut decoder_key).expect("32 is a valid length for SHA256");
 
+    hk.expand(&info, &mut decoder_key)
+        .expect("32 is a valid length for SHA256");
 
-    fs::write("src/gen_constants.rs", format!("const DECODER_KEY: [u8; 32] = {:#?};", decoder_key)).expect("Failed to write constants");
+    fs::write(
+        out.join("gen_constants.rs"),
+        format!(
+            "const DECODER_KEY: [u8; 32] = {:#?};\nconst CHANNEL_0_KEY: [u8; 32] = {:#?};",
+            decoder_key, channel_0_key
+        ),
+    )
+    .expect("Failed to write constants");
 }
