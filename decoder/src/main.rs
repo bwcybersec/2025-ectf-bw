@@ -84,19 +84,32 @@ fn main() -> ! {
     led_g.set_power_vddioh();
     led_b.set_power_vddioh();
 
+    // Set light red: Initializing
+    led_r.set_low();
+    led_g.set_high();
+    led_b.set_high();
+
     let flc = Flc::new(p.flc, clks.sys_clk);
 
     let mut icc = Icc::new(p.icc0);
 
     icc.disable();
-    // heprintln!("Initializing decoder storage.");
     let mut storage = DecoderStorage::init(flc).unwrap();
 
-    // heprintln!("Initializing decoder.");
+    // Set light magenta: Initialized storage
+    led_r.set_low();
+    led_g.set_high();
+    led_b.set_low();
+
     let mut decoder: Decoder<'_> = Decoder::new(&mut storage);
     // dbg!(&decoder);
 
     let mut console = DecoderConsole(uart);
+
+    // Set light green: Ready!
+    led_r.set_high();
+    led_g.set_low();
+    led_b.set_high();
 
     loop {
         if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder) {
