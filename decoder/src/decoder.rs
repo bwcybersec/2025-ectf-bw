@@ -1,7 +1,7 @@
 use postcard::{from_bytes, to_extend};
 use serde::{Deserialize, Serialize};
 
-use crate::{flash::DecoderStorage, host_comms::DecoderError};
+use crate::{crypto::Chacha20Key, flash::DecoderStorage, host_comms::DecoderError};
 
 const MAX_SUBSCRIPTION_COUNT: usize = 8;
 
@@ -104,4 +104,5 @@ pub struct Subscription {
     pub channel_id: u32,
     pub start_time: u64,
     pub end_time: u64,
+    pub channel_key: Chacha20Key
 }

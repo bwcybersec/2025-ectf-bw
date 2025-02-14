@@ -4,8 +4,7 @@ use alloc::format;
 use hal::{pac::Uart0, uart::BuiltUartPeripheral};
 
 use crate::{
-    decoder::{Decoder, Subscription},
-    flash::DecoderStorageWriteError,
+    crypto::Chacha20Key, decoder::{Decoder, Subscription}, flash::DecoderStorageWriteError
 };
 
 #[derive(PartialEq, Eq)]
@@ -158,16 +157,18 @@ impl<RX, TX> DecoderConsole<RX, TX> {
     pub fn read_subscription(&self) -> Result<Subscription, DecoderError> {
         let mut reader: DecoderPayloadReader<'_, RX, TX> = DecoderPayloadReader::new(&self);
 
-        let _decoder_id = reader.read_u32();
         // TODO: Replace this with a secure implementation
+        let channel_id = reader.read_u32();
         let start_time = reader.read_u64();
         let end_time = reader.read_u64();
-        let channel_id = reader.read_u32();
+        let mut channel_key: Chacha20Key = Default::default();
+        reader.read_bytes(&mut channel_key);
 
         Ok(Subscription {
             channel_id,
             start_time,
             end_time,
+            channel_key
         })
     }
 

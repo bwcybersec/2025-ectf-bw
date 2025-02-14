@@ -58,10 +58,14 @@ def gen_subscription(
         context=device_id_bytes
     )
 
+    channel_key = bytes.fromhex(secrets["channel_keys"][str(channel)])
+
     logger.debug("decoder_key is "+decoder_key.hex())
 
+    payload = struct.pack("<IQQ", channel, start, end) + channel_key
+    
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
-    return struct.pack("<IQQI", device_id, start, end, channel)
+    return payload
 
 
 def parse_args():

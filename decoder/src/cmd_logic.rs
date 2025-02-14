@@ -1,11 +1,10 @@
 use alloc::format;
 
 use crate::{
-    decoder::Decoder,
-    host_comms::{DecoderConsole, DecoderError, DecoderMessageType},
+    crypto::CHACHA20_KEY_BYTES, decoder::Decoder, host_comms::{DecoderConsole, DecoderError, DecoderMessageType}
 };
 
-const SUBSCRIPTION_MESSAGE_SIZE: u16 = 24;
+const SUBSCRIPTION_MESSAGE_SIZE: u16 = 4+8+8+(CHACHA20_KEY_BYTES as u16);
 
 pub fn run_command<RX, TX>(
     console: &mut DecoderConsole<RX, TX>,
