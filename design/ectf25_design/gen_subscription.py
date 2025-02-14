@@ -57,7 +57,7 @@ def gen_subscription(
         salt=salt,
         hashmod=SHA256,
         num_keys=1,
-        context=device_id_bytes
+        context=device_id_bytes,
     )
 
     channel_key = bytes.fromhex(secrets["channel_keys"][str(channel)])
@@ -74,7 +74,7 @@ def gen_subscription(
 
     # logger.debug(f"ctlen: {len(subscription_ct)} ptlen {len(subscription_pt)}")
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
-    return nonce+tag+subscription_ct
+    return nonce + tag + subscription_ct
 
 
 def parse_args():

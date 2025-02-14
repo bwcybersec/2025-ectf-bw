@@ -42,9 +42,7 @@ def gen_secrets(channels: list[int]) -> bytes:
         "channels": channels,
         "deployment_key": os.urandom(32).hex(),
         "channel_0_key": os.urandom(32).hex(),
-        "channel_keys": {
-            channel: os.urandom(32).hex() for channel in channels
-        },
+        "channel_keys": {channel: os.urandom(32).hex() for channel in channels},
         "salt": os.urandom(32).hex(),
     }
 

@@ -17,6 +17,7 @@ import struct
 import json
 from os import urandom
 
+
 class Encoder:
     def __init__(self, secrets: bytes):
         """
@@ -58,16 +59,18 @@ class Encoder:
         # TODO: encode the satellite frames so that they meet functional and
         #  security requirements
 
-        channel_key = self.channel_0_key if channel == 0 else self.channel_keys[str(channel)]
-        
+        channel_key = (
+            self.channel_0_key if channel == 0 else self.channel_keys[str(channel)]
+        )
+
         channel_key = bytes.fromhex(channel_key)
-        
-        payload_pt = struct.pack("<Q")+frame
-        
+
+        payload_pt = struct.pack("<Q") + frame
+
         nonce = urandom(24)
         cipher = ChaCha20_Poly1305.new(key=channel_key, nonce=nonce)
         payload_ct, tag = cipher.encrypt_and_digest(payload_pt)
-        
+
         return struct.pack("<I", channel) + nonce + tag + payload_ct
 
 
