@@ -4,7 +4,12 @@ use alloc::format;
 use hal::{pac::Uart0, uart::BuiltUartPeripheral};
 
 use crate::{
-    crypto::{decrypt_decoder_encrypted_packet, decrypt_encrypted_packet, Chacha20Key, CHACHA20_KEY_BYTES, XCHACHA20_NONCE_BYTES, XCHACHA20_TAG_BYTES}, decoder::{Decoder, Subscription}, flash::DecoderStorageWriteError
+    crypto::{
+        decrypt_decoder_encrypted_packet, decrypt_encrypted_packet, Chacha20Key,
+        CHACHA20_KEY_BYTES, XCHACHA20_NONCE_BYTES, XCHACHA20_TAG_BYTES,
+    },
+    decoder::{Decoder, Subscription},
+    flash::DecoderStorageWriteError,
 };
 
 #[derive(PartialEq, Eq)]
@@ -157,7 +162,7 @@ impl<RX, TX> DecoderConsole<RX, TX> {
     /// subscription object, ready to be inserted into the subscription list by
     /// the logical Decoder
     pub fn read_subscription(&self) -> Result<Subscription, DecoderError> {
-        const SUBSCRIPTION_SIZE: usize = 4+8+8+CHACHA20_KEY_BYTES;
+        const SUBSCRIPTION_SIZE: usize = 4 + 8 + 8 + CHACHA20_KEY_BYTES;
 
         let mut reader: DecoderPayloadReader<'_, RX, TX> = DecoderPayloadReader::new(&self);
 
@@ -170,20 +175,22 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         reader.read_bytes(&mut body);
         reader.finish_payload();
 
-        if let Err(_) = decrypt_decoder_encrypted_packet(&nonce, &tag, &mut body) { 
-            return Err(DecoderError::FailedDecryption) 
+        if let Err(_) = decrypt_decoder_encrypted_packet(&nonce, &tag, &mut body) {
+            return Err(DecoderError::FailedDecryption);
         };
 
         let channel_id = u32::from_le_bytes(body[0..4].try_into().expect("4 == 4"));
         let start_time = u64::from_le_bytes(body[4..12].try_into().expect("8 == 8"));
         let end_time = u64::from_le_bytes(body[12..20].try_into().expect("8 == 8"));
-        let channel_key: [u8; CHACHA20_KEY_BYTES] = body[20..].try_into().expect("subscription must be 4+8+8+CHACHA20_KEY_BYTES in length");
+        let channel_key: [u8; CHACHA20_KEY_BYTES] = body[20..]
+            .try_into()
+            .expect("subscription must be 4+8+8+CHACHA20_KEY_BYTES in length");
 
         Ok(Subscription {
             channel_id,
             start_time,
             end_time,
-            channel_key
+            channel_key,
         })
     }
 

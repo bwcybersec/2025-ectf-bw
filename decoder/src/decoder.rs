@@ -104,5 +104,5 @@ pub struct Subscription {
     pub channel_id: u32,
     pub start_time: u64,
     pub end_time: u64,
-    pub channel_key: Chacha20Key
+    pub channel_key: Chacha20Key,
 }
