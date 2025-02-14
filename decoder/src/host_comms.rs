@@ -132,9 +132,9 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         let sub_count = subscriptions.clone().count();
         let payload_len = (sub_count * (4 + 8 + 8)) as u16;
 
-        subscriptions.clone().for_each(|x| {
-            self.print_debug(&format!("{x:?}"));
-        });
+        // subscriptions.clone().for_each(|x: &Subscription| {
+        //     self.print_debug(&format!("{x:?}"));
+        // });
 
         self.write_byte(b'%'); // magic byte
         self.write_byte(b'L'); // message type
