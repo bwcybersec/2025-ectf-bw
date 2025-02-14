@@ -6,7 +6,7 @@ prefixed before the encrypted packet payload.
 
 | Field           | Size (in bits) |
 | --------------- | -------------- |
-| Message Length  | 32             |
+<!-- | Message Length  | 32             | -->
 | Nonce           | 192            |
 | MAC Tag         | 128            |
 
