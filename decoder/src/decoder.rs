@@ -3,7 +3,11 @@ use core::cell::Cell;
 use postcard::{from_bytes, to_extend};
 use serde::{Deserialize, Serialize};
 
-use crate::{crypto::{decrypt_encrypted_packet, Chacha20Key, XChacha20Nonce, XChacha20Tag, CHANNEL_0_KEY}, flash::DecoderStorage, host_comms::{DecoderConsole, DecoderError}};
+use crate::{
+    crypto::{decrypt_encrypted_packet, Chacha20Key, XChacha20Nonce, XChacha20Tag, CHANNEL_0_KEY},
+    flash::DecoderStorage,
+    host_comms::{DecoderConsole, DecoderError},
+};
 
 const MAX_SUBSCRIPTION_COUNT: usize = 8;
 
@@ -30,7 +34,7 @@ impl<'a> Decoder<'a> {
             decoder = Self {
                 subscriptions,
                 storage,
-                curr_time: Cell::new(None)
+                curr_time: Cell::new(None),
             };
         }
 
@@ -87,14 +91,20 @@ impl<'a> Decoder<'a> {
 
         Ok(())
     }
-    
+
     /// This decrypts and decodes a frame given the channel id and crypto parameters.
     /// payload will be clobbered.
-    pub fn decode_frame<RX,TX>(&self, channel_id: u32, nonce: &XChacha20Nonce, tag: &XChacha20Tag, payload: &'a mut heapless::Vec<u8, 72>, console: &DecoderConsole<RX, TX>) -> Result<&'a [u8], DecoderError> {
+    pub fn decode_frame(
+        &self,
+        channel_id: u32,
+        nonce: &XChacha20Nonce,
+        tag: &XChacha20Tag,
+        payload: &'a mut heapless::Vec<u8, 72>,
+    ) -> Result<&'a [u8], DecoderError> {
         let start_time;
         let end_time;
         let channel_key;
-        
+
         if channel_id == 0 {
             start_time = u64::MIN;
             end_time = u64::MAX;
@@ -105,28 +115,31 @@ impl<'a> Decoder<'a> {
                     start_time = sub.start_time;
                     end_time = sub.end_time;
                     channel_key = &sub.channel_key;
-                },
+                }
                 None => return Err(DecoderError::NoSubscription(channel_id)),
             };
         };
 
         // console.print_debug(&alloc::format!("decode_frame chan {channel_id} {nonce:?} {tag:?} {payload:?}"));
-        decrypt_encrypted_packet(channel_key, nonce, tag, payload).or(Err(DecoderError::FailedDecryption))?;
+        decrypt_encrypted_packet(channel_key, nonce, tag, payload)
+            .or(Err(DecoderError::FailedDecryption))?;
 
         let timestamp = u64::from_le_bytes(payload[0..8].try_into().expect("8 == 8"));
         if timestamp < start_time || timestamp > end_time {
-            return Err(DecoderError::SubscriptionTimeMismatch(channel_id, timestamp))
+            return Err(DecoderError::SubscriptionTimeMismatch(
+                channel_id, timestamp,
+            ));
         }
 
         let curr_time = self.curr_time.get();
         if let Some(curr_time) = curr_time {
-            if (curr_time >= timestamp) {
+            if curr_time >= timestamp {
                 return Err(DecoderError::FrameOutOfOrder(timestamp, curr_time));
             }
         }
 
         self.curr_time.set(Some(timestamp));
-        
+
         Ok(&payload[8..])
     }
 }

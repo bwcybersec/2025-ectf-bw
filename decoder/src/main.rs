@@ -84,7 +84,6 @@ fn main() -> ! {
     led_g.set_power_vddioh();
     led_b.set_power_vddioh();
 
-
     let flc = Flc::new(p.flc, clks.sys_clk);
 
     let mut icc = Icc::new(p.icc0);
@@ -98,11 +97,6 @@ fn main() -> ! {
     // dbg!(&decoder);
 
     let mut console = DecoderConsole(uart);
-
-    led_r.set_high();
-    // led_g.set_high();
-    led_b.set_high();
-    delay.delay_ms(500);
 
     loop {
         if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder) {

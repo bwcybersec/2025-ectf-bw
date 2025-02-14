@@ -5,7 +5,8 @@ use hal::{pac::Uart0, uart::BuiltUartPeripheral};
 
 use crate::{
     crypto::{
-        decrypt_decoder_encrypted_packet, CHACHA20_KEY_BYTES, ENCODER_CRYPTO_HEADER_LEN, XCHACHA20_NONCE_BYTES, XCHACHA20_TAG_BYTES
+        decrypt_decoder_encrypted_packet, CHACHA20_KEY_BYTES, ENCODER_CRYPTO_HEADER_LEN,
+        XCHACHA20_NONCE_BYTES, XCHACHA20_TAG_BYTES,
     },
     decoder::{Decoder, Subscription},
     flash::DecoderStorageWriteError,
@@ -134,13 +135,9 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         let sub_count = subscriptions.clone().count();
         let payload_len = (sub_count * (4 + 8 + 8)) as u16;
 
-        // subscriptions.clone().for_each(|x: &Subscription| {
-        //     self.print_debug(&format!("{x:?}"));
-        // });
-
         self.write_byte(b'%'); // magic byte
         self.write_byte(b'L'); // message type
-        self.write_u16(payload_len + 4); // message type 
+        self.write_u16(payload_len + 4); // message type
 
         self.read_ack()?;
 
@@ -220,9 +217,9 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         let mut payload: heapless::Vec<u8, 72> = heapless::Vec::new();
         reader.extend_with_n_bytes(&mut payload, payload_length as usize);
         reader.finish_payload();
-        
-        let frame = decoder.decode_frame(channel_id, &nonce, &tag, &mut payload, &self)?;
-        
+
+        let frame = decoder.decode_frame(channel_id, &nonce, &tag, &mut payload)?;
+
         // Write out the frame.
         self.write_byte(b'%'); // magic byte
         self.write_byte(b'D'); // message type
@@ -233,7 +230,7 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         let mut writer: DecoderPayloadWriter<'_, RX, TX> = DecoderPayloadWriter::new(&self);
         writer.write_bytes(&frame)?;
         writer.finish_payload()?;
-        
+
         Ok(())
     }
 
@@ -302,10 +299,6 @@ impl<RX, TX> DecoderConsole<RX, TX> {
     fn write_u32(&self, val: u32) {
         self.0.write_bytes(&val.to_le_bytes())
     }
-
-    fn write_u64(&self, val: u64) {
-        self.0.write_bytes(&val.to_le_bytes())
-    }
 }
 
 /// This struct represents a payload being written to the wire.
@@ -338,10 +331,6 @@ impl<'a, RX, TX> DecoderPayloadWriter<'a, RX, TX> {
             self.write_byte(*byte)?
         }
         Ok(())
-    }
-
-    fn write_u16(&mut self, val: u16) -> Result<(), DecoderError> {
-        self.write_bytes(&val.to_le_bytes())
     }
 
     fn write_u32(&mut self, val: u32) -> Result<(), DecoderError> {
@@ -396,12 +385,6 @@ impl<'a, RX, TX> DecoderPayloadReader<'a, RX, TX> {
         let mut bytes: [u8; 4] = Default::default();
         self.read_bytes(&mut bytes);
         u32::from_le_bytes(bytes)
-    }
-
-    fn read_u64(&mut self) -> u64 {
-        let mut bytes: [u8; 8] = Default::default();
-        self.read_bytes(&mut bytes);
-        u64::from_le_bytes(bytes)
     }
 
     fn finish_payload(self) {
