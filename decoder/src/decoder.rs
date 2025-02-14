@@ -86,7 +86,8 @@ impl<'a> Decoder<'a> {
     }
 }
 
-// Sigh.
+/// This helper type exists solely so that we can have Extend on a &mut to
+/// a heapless vec. Sigh.
 struct ExtendableHeaplessVecMut<'why, T, const N: usize> {
     the_reference: &'why mut heapless::Vec<T, N>,
 }

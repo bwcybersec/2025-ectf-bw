@@ -13,7 +13,7 @@
 use std::env::{self, var};
 use std::fs::{self, File};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use hkdf::Hkdf;
 use serde::Deserialize;
@@ -53,8 +53,23 @@ fn main() {
     // Set the linker script to the one provided by cortex-m-rt.
     println!("cargo:rustc-link-arg=-Tlink.x");
 
+    // Just to get rust-analyzer to be kinda useful, generate some all zero
+    // constants if /secrets/secrets.json doesn't exist.
+
+    let secrets_path = Path::new("/secrets/secrets.json");
+    if !secrets_path.exists() {
+        println!("cargo::warning=secrets file does not exist, writing mock secrets.");
+        fs::write(
+            out.join("gen_constants.rs"),
+            "const DECODER_KEY: Chacha20Key = [0; 32];\nconst CHANNEL_0_KEY: Chacha20Key = [0; 32];",
+        )
+        .expect("Failed to write constants");
+
+        return;
+    }
+
     // Import secrets
-    let secrets_file = File::open("/secrets/secrets.json").expect("couldn't read secrets");
+    let secrets_file = File::open(secrets_path).expect("couldn't open secrets");
     let secrets: Secrets = serde_json::from_reader(secrets_file).expect("couldn't parse secrets");
     let deployment_key =
         hex::decode(secrets.deployment_key).expect("couldn't unhex deployment_key");
@@ -73,7 +88,7 @@ fn main() {
     fs::write(
         out.join("gen_constants.rs"),
         format!(
-            "const DECODER_KEY: [u8; 32] = {:#?};\nconst CHANNEL_0_KEY: [u8; 32] = {:#?};",
+            "const DECODER_KEY: Chacha20Key = {:#?};\nconst CHANNEL_0_KEY: Chacha20Key = {:#?};",
             decoder_key, channel_0_key
         ),
     )
