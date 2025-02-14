@@ -21,6 +21,7 @@ embedded-alloc = "0.6"
 heapless = "0.8"
 postcard = "1.0"
 serde = { version = "1.0.*", default-features = false }
+chacha20poly1305 = { version = "0.10.1", default-features = false, features = ["heapless"] }
 
 [build-dependencies]
 serde = { version = "1.0", features = ["derive"] }

@@ -1,10 +1,15 @@
 use alloc::format;
 
 use crate::{
-    crypto::CHACHA20_KEY_BYTES, decoder::Decoder, host_comms::{DecoderConsole, DecoderError, DecoderMessageType}
+    crypto::{CHACHA20_KEY_BYTES, ENCODER_CRYPTO_HEADER_LEN}, decoder::Decoder, host_comms::{DecoderConsole, DecoderError, DecoderMessageType}
 };
 
-const SUBSCRIPTION_MESSAGE_SIZE: u16 = 4+8+8+(CHACHA20_KEY_BYTES as u16);
+// 4 for channel number
+// 8 for start time
+// 8 for end time
+// CHACHA20_KEY_BYTES for channel key
+// ENCODER_CRYPTO_HEADER_LEN for crypto header
+const SUBSCRIPTION_MESSAGE_SIZE: u16 = 4+8+8+(CHACHA20_KEY_BYTES as u16)+(ENCODER_CRYPTO_HEADER_LEN as u16);
 
 pub fn run_command<RX, TX>(
     console: &mut DecoderConsole<RX, TX>,
@@ -39,8 +44,6 @@ pub fn run_command<RX, TX>(
                     console.write_ack();
 
                     let sub = console.read_subscription()?;
-
-                    console.write_ack();
 
                     decoder.register_subscription(sub)?;
 

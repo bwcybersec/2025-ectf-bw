@@ -4,7 +4,7 @@ use alloc::format;
 use hal::{pac::Uart0, uart::BuiltUartPeripheral};
 
 use crate::{
-    crypto::Chacha20Key, decoder::{Decoder, Subscription}, flash::DecoderStorageWriteError
+    crypto::{decrypt_decoder_encrypted_packet, decrypt_encrypted_packet, Chacha20Key, CHACHA20_KEY_BYTES, XCHACHA20_NONCE_BYTES, XCHACHA20_TAG_BYTES}, decoder::{Decoder, Subscription}, flash::DecoderStorageWriteError
 };
 
 #[derive(PartialEq, Eq)]
@@ -30,6 +30,7 @@ pub enum DecoderError {
     SerializationFailed(postcard::Error),
     /// Saving the serialized data to flash failed
     SavingFailed(DecoderStorageWriteError),
+    FailedDecryption,
 }
 
 impl Display for DecoderError {
@@ -53,7 +54,8 @@ impl Display for DecoderError {
                 "Was asked to decode a frame for channel {} with timestamp {}, but that timestamp is invalid for our subscription.", channel_id, timestamp
             ),
             Self::SerializationFailed(err) => write!(f, "Attempted to serialize subscription updates for flash, and failed with error {err}"),
-            Self::SavingFailed(err) => write!(f, "Attempted to save subscription updates to flash, and failed with error {err:?}")
+            Self::SavingFailed(err) => write!(f, "Attempted to save subscription updates to flash, and failed with error {err:?}"),
+            Self::FailedDecryption => write!(f, "Failed to decrypt a encrypted payload."),
          }
     }
 }
@@ -155,14 +157,27 @@ impl<RX, TX> DecoderConsole<RX, TX> {
     /// subscription object, ready to be inserted into the subscription list by
     /// the logical Decoder
     pub fn read_subscription(&self) -> Result<Subscription, DecoderError> {
+        const SUBSCRIPTION_SIZE: usize = 4+8+8+CHACHA20_KEY_BYTES;
+
         let mut reader: DecoderPayloadReader<'_, RX, TX> = DecoderPayloadReader::new(&self);
 
-        // TODO: Replace this with a secure implementation
-        let channel_id = reader.read_u32();
-        let start_time = reader.read_u64();
-        let end_time = reader.read_u64();
-        let mut channel_key: Chacha20Key = Default::default();
-        reader.read_bytes(&mut channel_key);
+        let mut nonce: [u8; XCHACHA20_NONCE_BYTES] = Default::default();
+        let mut tag: [u8; XCHACHA20_TAG_BYTES] = Default::default();
+        let mut body: [u8; SUBSCRIPTION_SIZE] = [0; SUBSCRIPTION_SIZE];
+
+        reader.read_bytes(&mut nonce);
+        reader.read_bytes(&mut tag);
+        reader.read_bytes(&mut body);
+        reader.finish_payload();
+
+        if let Err(_) = decrypt_decoder_encrypted_packet(&nonce, &tag, &mut body) { 
+            return Err(DecoderError::FailedDecryption) 
+        };
+
+        let channel_id = u32::from_le_bytes(body[0..4].try_into().expect("4 == 4"));
+        let start_time = u64::from_le_bytes(body[4..12].try_into().expect("8 == 8"));
+        let end_time = u64::from_le_bytes(body[12..20].try_into().expect("8 == 8"));
+        let channel_key: [u8; CHACHA20_KEY_BYTES] = body[20..].try_into().expect("subscription must be 4+8+8+CHACHA20_KEY_BYTES in length");
 
         Ok(Subscription {
             channel_id,
