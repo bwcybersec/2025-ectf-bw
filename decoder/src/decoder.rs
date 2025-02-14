@@ -7,7 +7,6 @@ const MAX_SUBSCRIPTION_COUNT: usize = 8;
 
 /// This struct represents the concept of the decoder. It will decode frames
 /// that it has a valid subscription for, and can register more subscriptions.
-#[derive(Debug)]
 pub struct Decoder<'a> {
     subscriptions: [Option<Subscription>; MAX_SUBSCRIPTION_COUNT],
     storage: &'a mut DecoderStorage,
@@ -99,7 +98,7 @@ impl<T, const N: usize> Extend<T> for ExtendableHeaplessVecMut<'_, T, N> {
 }
 
 // Not Copy because it's potentially a bit big.
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct Subscription {
     pub channel_id: u32,
     pub start_time: u64,
