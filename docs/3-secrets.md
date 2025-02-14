@@ -1,6 +1,7 @@
 # Secrets
 
-BW's implementation of the Encoder and Decoder make use of several secrets.
+BW's implementation of the Encoder and Decoder make use of several cryptographic
+secrets, as described below.
 
 ## Keys
 

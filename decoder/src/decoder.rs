@@ -133,7 +133,7 @@ impl<'a> Decoder<'a> {
 
         let curr_time = self.curr_time.get();
         if let Some(curr_time) = curr_time {
-            if curr_time >= timestamp {
+            if curr_time > timestamp {
                 return Err(DecoderError::FrameOutOfOrder(timestamp, curr_time));
             }
         }

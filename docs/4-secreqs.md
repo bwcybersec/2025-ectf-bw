@@ -8,6 +8,15 @@ System the Decoder was provisioned for.
 Our implementation meets these requirements by using AEAD encryption. This
 ensures that it is impossible to forge a frame without the encryption key. We
 additionally have channel subscriptions include a different encryption key,
-meaning that it is impossible to decode a frame without having a subscription.
+meaning that it is impossible to decode a frame without having a subscription,
+and impossible to decode a subscription without it being destined for your
+encoder.
+
+3. The Decoder should only decode frames with strictly monotonically increasing 
+timestamps.
+
+The decoder keeps track of the timestamp of the last frame received. It compares
+all incoming frames to this value, and rejects any which are not larger than the
+last frames timestamp.
 
 \newpage
