@@ -53,7 +53,8 @@ pub fn run_command<RX, TX>(
                     console.send_empty_payload(b'S')?;
                 }
                 DecoderMessageType::Decode => {
-                    // This logic is done inside of DecoderConsole
+                    console.write_ack();
+
                     console.decode_frame(&decoder, hdr.size)?;
                 }
             }

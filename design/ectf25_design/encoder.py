@@ -65,7 +65,7 @@ class Encoder:
 
         channel_key = bytes.fromhex(channel_key)
 
-        payload_pt = struct.pack("<Q") + frame
+        payload_pt = struct.pack("<Q",timestamp) + frame
 
         nonce = urandom(24)
         cipher = ChaCha20_Poly1305.new(key=channel_key, nonce=nonce)

@@ -7,6 +7,7 @@
 extern crate alloc;
 use flash::DecoderStorage;
 use hal::flc::Flc;
+use hal::icc::Icc;
 
 use core::ptr::addr_of_mut;
 
@@ -54,8 +55,8 @@ fn main() -> ! {
         .freeze();
 
     // Initialize a delay timer using the ARM SYST (SysTick) peripheral
-    // let rate = clks.sys_clk.frequency;
-    // let mut delay = cortex_m::delay::Delay::new(core.SYST, rate);
+    let rate = clks.sys_clk.frequency;
+    let mut delay = cortex_m::delay::Delay::new(core.SYST, rate);
 
     // Initialize and split the GPIO0 peripheral into pins
     let gpio0_pins = hal::gpio::Gpio0::new(p.gpio0, &mut gcr.reg).split();
@@ -83,12 +84,12 @@ fn main() -> ! {
     led_g.set_power_vddioh();
     led_b.set_power_vddioh();
 
-    led_r.set_high();
-    // led_g.set_high();
-    led_b.set_high();
 
     let flc = Flc::new(p.flc, clks.sys_clk);
 
+    let mut icc = Icc::new(p.icc0);
+
+    icc.disable();
     // heprintln!("Initializing decoder storage.");
     let mut storage = DecoderStorage::init(flc).unwrap();
 
@@ -97,6 +98,11 @@ fn main() -> ! {
     // dbg!(&decoder);
 
     let mut console = DecoderConsole(uart);
+
+    led_r.set_high();
+    // led_g.set_high();
+    led_b.set_high();
+    delay.delay_ms(500);
 
     loop {
         if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder) {

@@ -61,7 +61,7 @@ fn main() {
         println!("cargo::warning=secrets file does not exist, writing mock secrets.");
         fs::write(
             out.join("gen_constants.rs"),
-            "const DECODER_KEY: Chacha20Key = [0; 32];\nconst CHANNEL_0_KEY: Chacha20Key = [0; 32];",
+            "const DECODER_KEY: Chacha20Key = [0; 32];\npub(crate) const CHANNEL_0_KEY: Chacha20Key = [0; 32];",
         )
         .expect("Failed to write constants");
 
@@ -88,7 +88,7 @@ fn main() {
     fs::write(
         out.join("gen_constants.rs"),
         format!(
-            "const DECODER_KEY: Chacha20Key = {:#?};\nconst CHANNEL_0_KEY: Chacha20Key = {:#?};",
+            "const DECODER_KEY: Chacha20Key = {:#?};\npub(crate) const CHANNEL_0_KEY: Chacha20Key = {:#?};",
             decoder_key, channel_0_key
         ),
     )
