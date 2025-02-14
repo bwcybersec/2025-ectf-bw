@@ -12,9 +12,11 @@ Copyright: Copyright (c) 2025 The MITRE Corporation
 
 import argparse
 import json
+from os import urandom
 from pathlib import Path
 import struct
 
+from Crypto.Cipher import ChaCha20_Poly1305
 from Crypto.Hash import SHA256
 from Crypto.Protocol.KDF import HKDF
 from loguru import logger
@@ -60,12 +62,19 @@ def gen_subscription(
 
     channel_key = bytes.fromhex(secrets["channel_keys"][str(channel)])
 
-    logger.debug("decoder_key is "+decoder_key.hex())
+    # logger.debug("decoder_key is "+decoder_key.hex())
 
-    payload = struct.pack("<IQQ", channel, start, end) + channel_key
-    
+    # Pack the subscription
+    subscription_pt = struct.pack("<IQQ", channel, start, end) + channel_key
+
+    # Encrypt the subscription
+    nonce = urandom(24)
+    cipher = ChaCha20_Poly1305.new(key=decoder_key, nonce=nonce)
+    subscription_ct, tag = cipher.encrypt_and_digest(subscription_pt)
+
+    # logger.debug(f"ctlen: {len(subscription_ct)} ptlen {len(subscription_pt)}")
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
-    return payload
+    return nonce+tag+subscription_ct
 
 
 def parse_args():
