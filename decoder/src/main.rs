@@ -7,8 +7,6 @@
 extern crate alloc;
 use flash::DecoderStorage;
 use hal::flc::Flc;
-use hal::gpio::InputOutput;
-use hal::gpio::Pin;
 use hal::icc::Icc;
 use led::LED;
 
