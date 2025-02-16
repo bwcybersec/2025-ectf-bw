@@ -7,7 +7,10 @@
 extern crate alloc;
 use flash::DecoderStorage;
 use hal::flc::Flc;
+use hal::gpio::InputOutput;
+use hal::gpio::Pin;
 use hal::icc::Icc;
+use led::LED;
 
 use core::ptr::addr_of_mut;
 
@@ -28,6 +31,8 @@ mod crypto;
 mod decoder;
 mod flash;
 mod host_comms;
+mod led;
+
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
@@ -84,10 +89,10 @@ fn main() -> ! {
     led_g.set_power_vddioh();
     led_b.set_power_vddioh();
 
+    let mut led = LED::new(led_r, led_g, led_b);
+
     // Set light red: Initializing
-    led_r.set_low();
-    led_g.set_high();
-    led_b.set_high();
+    led.red();
 
     let flc = Flc::new(p.flc, clks.sys_clk);
 
@@ -96,23 +101,16 @@ fn main() -> ! {
     icc.disable();
     let mut storage = DecoderStorage::init(flc).unwrap();
 
-    // Set light magenta: Initialized storage
-    led_r.set_low();
-    led_g.set_high();
-    led_b.set_low();
-
     let mut decoder: Decoder<'_> = Decoder::new(&mut storage);
     // dbg!(&decoder);
 
     let mut console = DecoderConsole(uart);
 
-    // Set light green: Ready!
-    led_r.set_high();
-    led_g.set_low();
-    led_b.set_high();
-
     loop {
-        if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder) {
+        // Set light green: Ready!
+        led.green();
+
+        if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder, &mut led) {
             err.write_to_console(&console);
         }
     }

@@ -35,7 +35,9 @@ pub enum DecoderError {
     SerializationFailed(postcard::Error),
     /// Saving the serialized data to flash failed
     SavingFailed(DecoderStorageWriteError),
+    /// Failed to decrypt an encrypted payload.
     FailedDecryption,
+    /// Recieved a frame from the past. We refuse to replay it.
     FrameOutOfOrder(u64, u64),
 }
 

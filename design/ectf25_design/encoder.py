@@ -56,8 +56,6 @@ class Encoder:
 
         :returns: The encoded frame, which will be sent to the Decoder
         """
-        # TODO: encode the satellite frames so that they meet functional and
-        #  security requirements
 
         channel_key = (
             self.channel_0_key if channel == 0 else self.channel_keys[str(channel)]

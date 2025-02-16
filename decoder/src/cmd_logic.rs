@@ -3,7 +3,7 @@ use alloc::format;
 use crate::{
     crypto::{CHACHA20_KEY_BYTES, ENCODER_CRYPTO_HEADER_LEN},
     decoder::Decoder,
-    host_comms::{DecoderConsole, DecoderError, DecoderMessageType},
+    host_comms::{DecoderConsole, DecoderError, DecoderMessageType}, led::LED,
 };
 
 // 4 for channel number
@@ -17,11 +17,14 @@ const SUBSCRIPTION_MESSAGE_SIZE: u16 =
 pub fn run_command<RX, TX>(
     console: &mut DecoderConsole<RX, TX>,
     decoder: &mut Decoder,
+    led: &mut LED
 ) -> Result<(), DecoderError> {
     match console.read_command_header() {
         Ok(hdr) => {
             match hdr.msg_type {
                 DecoderMessageType::List => {
+                    led.cyan();
+
                     // List subscriptions
                     // No body to read, just ACK the header
                     if hdr.size != 0 {
@@ -36,6 +39,8 @@ pub fn run_command<RX, TX>(
                     console.send_list(subscriptions)?;
                 }
                 DecoderMessageType::Subscribe => {
+                    led.yellow();
+
                     if hdr.size != SUBSCRIPTION_MESSAGE_SIZE {
                         let _ = console.print_error(&format!(
                             "Subscription message should have a size of {}, was {}",
@@ -53,6 +58,8 @@ pub fn run_command<RX, TX>(
                     console.send_empty_payload(b'S')?;
                 }
                 DecoderMessageType::Decode => {
+                    led.magenta();
+
                     console.write_ack();
 
                     console.decode_frame(&decoder, hdr.size)?;
