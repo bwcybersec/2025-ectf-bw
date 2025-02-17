@@ -14,6 +14,7 @@ pub type XChacha20Tag = [u8; XCHACHA20_TAG_BYTES];
 // Signing
 pub const ED25519_SIGNATURE_BYTES: usize = ed25519_dalek::SIGNATURE_LENGTH;
 pub type Ed25519PubKey = [u8; ed25519_dalek::PUBLIC_KEY_LENGTH];
+pub type Ed25519Signature = [u8; ED25519_SIGNATURE_BYTES];
 
 include!(concat!(env!("OUT_DIR"), "/gen_constants.rs"));
 
