@@ -37,27 +37,30 @@ fn main() {
         .unwrap()
         .write_all(include_bytes!("memory.x"))
         .unwrap();
-    println!("cargo:rustc-link-search={}", out.display());
+    println!("cargo::rustc-link-search={}", out.display());
 
-    // By default, Cargo will re-run a build script whenever
-    // any file in the project changes. By specifying `memory.x`
-    // here, we ensure the build script is only re-run when
-    // `memory.x` is changed.
-    // println!("cargo:rerun-if-changed=memory.x");
-    // BW - Rerun every time, thinking about this is too hard
+    // I'm (ab)using build.rs for bringing secrets and stuff in. So I'm just
+    // forcing a rerun of build.rs everytime.
+
+    // Thanks to this random forum post for the bad idea
+    // https://users.rust-lang.org/t/how-can-i-make-build-rs-rerun-every-time-that-cargo-run-or-cargo-build-is-run/51852/5
+
+    std::env::set_var("REBUILD", format!("{:?}", std::time::Instant::now()));
+    println!("cargo::rerun-if-env-changed=REBUILD");
+    println!("cargo::warning=ran build.rs");
 
     // Specify linker arguments.
 
     // `--nmagic` is required if memory section addresses are not aligned to 0x10000,
     // for example the FLASH and RAM sections in your `memory.x`.
     // See https://github.com/rust-embedded/cortex-m-quickstart/pull/95
-    println!("cargo:rustc-link-arg=--nmagic");
+    println!("cargo::rustc-link-arg=--nmagic");
 
     // Set the linker script to the one provided by cortex-m-rt.
-    println!("cargo:rustc-link-arg=-Tlink.x");
+    println!("cargo::rustc-link-arg=-Tlink.x");
 
     // Just to get rust-analyzer to be kinda useful, generate some all zero
-    // constants if /secrets/secrets.json doesn't exist.
+    // constants if /global.secrets doesn't exist.
 
     let secrets_path = Path::new("/global.secrets");
     if !secrets_path.exists() {
