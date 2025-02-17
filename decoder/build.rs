@@ -15,6 +15,8 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use ed25519_dalek::pkcs8::DecodePrivateKey;
+use ed25519_dalek::SigningKey;
 use hkdf::Hkdf;
 use serde::Deserialize;
 use sha2::Sha256;
@@ -24,6 +26,7 @@ struct Secrets {
     deployment_key: String,
     salt: String,
     channel_0_key: String,
+    signing_sk: String,
 }
 
 fn main() {
@@ -61,7 +64,7 @@ fn main() {
         println!("cargo::warning=secrets file does not exist, writing mock secrets.");
         fs::write(
             out.join("gen_constants.rs"),
-            "const DECODER_KEY: Chacha20Key = [0; 32];\npub(crate) const CHANNEL_0_KEY: Chacha20Key = [0; 32];",
+            "const DECODER_KEY: Chacha20Key = [0; 32];\npub(crate) const CHANNEL_0_KEY: Chacha20Key = [0; 32];\nconst VERIFYING_KEY_COMPRESSED: Ed25519PubKey = [0; 32];",
         )
         .expect("Failed to write constants");
 
@@ -71,6 +74,8 @@ fn main() {
     // Import secrets
     let secrets_file = File::open(secrets_path).expect("couldn't open secrets");
     let secrets: Secrets = serde_json::from_reader(secrets_file).expect("couldn't parse secrets");
+
+    // ChaCha20 (symmetric/encrypting) secrets
     let deployment_key =
         hex::decode(secrets.deployment_key).expect("couldn't unhex deployment_key");
     let salt = hex::decode(secrets.salt).expect("couldn't unhex salt");
@@ -85,11 +90,23 @@ fn main() {
     hk.expand(&info, &mut decoder_key)
         .expect("32 is a valid length for SHA256");
 
+    // Ed25519 (asymmetric/signing) secrets
+    // Note for the reader:
+    // sk -> secret key (this does not go to the decoder)
+    // vk -> verifying key (this goes to the decoder)
+    let signing_sk =
+        SigningKey::from_pkcs8_pem(&secrets.signing_sk).expect("couldn't import signing_sk");
+    let signing_vk = signing_sk.verifying_key();
+
+    assert!(!signing_vk.is_weak(), "How is our signing key weak?");
+
+    let signing_vk_bytes = signing_vk.as_bytes();
+
     fs::write(
         out.join("gen_constants.rs"),
         format!(
-            "const DECODER_KEY: Chacha20Key = {:#?};\npub(crate) const CHANNEL_0_KEY: Chacha20Key = {:#?};",
-            decoder_key, channel_0_key
+            "const DECODER_KEY: Chacha20Key = {:#?};\npub(crate) const CHANNEL_0_KEY: Chacha20Key = {:#?};\nconst VERIFYING_KEY_COMPRESSED: Ed25519PubKey = {:#?};",
+            decoder_key, channel_0_key, signing_vk_bytes
         ),
     )
     .expect("Failed to write constants");

@@ -3,18 +3,22 @@ use hal::gpio::{InputOutput, Pin};
 pub struct LED {
     led_r: Pin<2, 0, InputOutput>,
     led_g: Pin<2, 1, InputOutput>,
-    led_b: Pin<2, 2, InputOutput>
+    led_b: Pin<2, 2, InputOutput>,
 }
 
 impl LED {
-    pub fn new(led_r: Pin<2, 0, InputOutput>, led_g: Pin<2, 1, InputOutput>, led_b:  Pin<2, 2, InputOutput>) -> Self {
+    pub fn new(
+        led_r: Pin<2, 0, InputOutput>,
+        led_g: Pin<2, 1, InputOutput>,
+        led_b: Pin<2, 2, InputOutput>,
+    ) -> Self {
         Self {
             led_r,
             led_g,
-            led_b
+            led_b,
         }
     }
-    
+
     fn set_lights(&mut self, red: bool, green: bool, blue: bool) {
         if red {
             self.led_r.set_low();

@@ -138,12 +138,7 @@ impl DecoderStorage {
         // Don't write the initialized magic here. This avoids a race condition
         // where the power could be pulled mid-write, which hypothetically could
         // lead to a channel key being set to all FF.
-        let mut u32s_to_write = [
-            0xFFFFFFFF,
-            self.buf.len() as u32,
-            0xDEADBEEF,
-            0xDEADBEEF,
-        ];
+        let mut u32s_to_write = [0xFFFFFFFF, self.buf.len() as u32, 0xDEADBEEF, 0xDEADBEEF];
 
         let mut i: usize = 2;
 
@@ -172,7 +167,8 @@ impl DecoderStorage {
         self.flc.write_128(cursor, &u32s_to_write)?;
 
         // we finished writing the flash, now write the flash initialized magic :)
-        self.flc.write_32(PERSIST_BASE_ADDR, FLASH_INITIALIZED_MAGIC)?;
+        self.flc
+            .write_32(PERSIST_BASE_ADDR, FLASH_INITIALIZED_MAGIC)?;
         Ok(())
     }
 
