@@ -3,7 +3,8 @@ use alloc::format;
 use crate::{
     crypto::{CHACHA20_KEY_BYTES, ENCODER_CRYPTO_HEADER_LEN},
     decoder::Decoder,
-    host_comms::{DecoderConsole, DecoderError, DecoderMessageType}, led::LED,
+    host_comms::{DecoderConsole, DecoderError, DecoderMessageType},
+    led::LED,
 };
 
 // 4 for channel number
@@ -17,7 +18,7 @@ const SUBSCRIPTION_MESSAGE_SIZE: u16 =
 pub fn run_command<RX, TX>(
     console: &mut DecoderConsole<RX, TX>,
     decoder: &mut Decoder,
-    led: &mut LED
+    led: &mut LED,
 ) -> Result<(), DecoderError> {
     match console.read_command_header() {
         Ok(hdr) => {

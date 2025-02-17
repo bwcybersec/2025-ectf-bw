@@ -5,6 +5,7 @@
 #![feature(array_chunks)]
 
 extern crate alloc;
+use crypto::bootstrap_crypto;
 use flash::DecoderStorage;
 use hal::flc::Flc;
 use hal::icc::Icc;
@@ -30,7 +31,6 @@ mod decoder;
 mod flash;
 mod host_comms;
 mod led;
-
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
@@ -103,6 +103,8 @@ fn main() -> ! {
     // dbg!(&decoder);
 
     let mut console = DecoderConsole(uart);
+
+    bootstrap_crypto();
 
     loop {
         // Set light green: Ready!
