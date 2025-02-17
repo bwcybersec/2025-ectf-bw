@@ -16,6 +16,7 @@ import os
 from base64 import b64encode
 from pathlib import Path
 
+from Crypto.PublicKey import ECC
 from loguru import logger
 
 
@@ -31,8 +32,10 @@ def gen_secrets(channels: list[int]) -> bytes:
 
     :returns: Contents of the secrets file
     """
-    # TODO: Update this function to generate any system-wide secrets needed by
-    #   your design
+
+    # Generate the signing key.
+
+    signing_sk = ECC.generate(curve="ed25519")
 
     # Create the secrets object
     # You can change this to generate any secret material
@@ -44,6 +47,7 @@ def gen_secrets(channels: list[int]) -> bytes:
         "channel_0_key": os.urandom(32).hex(),
         "channel_keys": {channel: os.urandom(32).hex() for channel in channels},
         "salt": os.urandom(32).hex(),
+        "signing_sk": signing_sk.export_key(format="PEM")
     }
 
     # NOTE: if you choose to use JSON for your file type, you will not be able to
