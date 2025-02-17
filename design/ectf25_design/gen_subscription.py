@@ -19,6 +19,8 @@ import struct
 from Crypto.Cipher import ChaCha20_Poly1305
 from Crypto.Hash import SHA256
 from Crypto.Protocol.KDF import HKDF
+from Crypto.PublicKey import ECC
+from Crypto.Signature import eddsa
 from loguru import logger
 
 
@@ -62,6 +64,8 @@ def gen_subscription(
 
     channel_key = bytes.fromhex(secrets["channel_keys"][str(channel)])
 
+    signing_sk = ECC.import_key(secrets["signing_sk"])
+
     # logger.debug("decoder_key is "+decoder_key.hex())
 
     # Pack the subscription
@@ -72,9 +76,13 @@ def gen_subscription(
     cipher = ChaCha20_Poly1305.new(key=decoder_key, nonce=nonce)
     subscription_ct, tag = cipher.encrypt_and_digest(subscription_pt)
 
+    # Sign the subscription
+    signer = eddsa.new(key=signing_sk, mode="rfc8032")
+    signature = signer.sign(subscription_pt)
+
     # logger.debug(f"ctlen: {len(subscription_ct)} ptlen {len(subscription_pt)}")
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
-    return nonce + tag + subscription_ct
+    return nonce + tag + signature + subscription_ct
 
 
 def parse_args():

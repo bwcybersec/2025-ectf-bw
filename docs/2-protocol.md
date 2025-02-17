@@ -1,16 +1,15 @@
 # Protocol
 
 All subscription updates and frames sent to the device are encrypted using the 
-XChaCha20-Poly1305 algorithm. All encrypted messages have the following header, 
-prefixed before the encrypted packet payload.
+XChaCha20-Poly1305 algorithm, and are signed using the Ed25519 algorithm. All 
+encrypted messages have the following header, prefixed before the encrypted 
+packet payload.
 
 | Field           | Size (in bits) |
 | --------------- | -------------- |
 | Nonce           | 192            |
 | MAC Tag         | 128            |
-
-There is one "decoder" encryption key baked into the decoder. This key is used 
-for encryption for all Update Subscription messages sent to the decoder.
+| Signature       | 512            |
 
 On receiving a message that is unable to be decrypted successfully, the decoder
 will pause until the total time since the command was sent hits 5 seconds.
@@ -27,9 +26,13 @@ payload is structured as follows:
 | End Timestamp   | 64             |
 | Channel Key     | 256            |
 
+
+There is one "decoder" encryption key baked into the decoder, which is derived
+from the Decoder ID. This key is used for encryption for all Update Subscription
+messages sent to the decoder.
+
 The decoder will respond with an empty body on successfully registering a
 subscription.
-
 
 ## Decode Frame
 
