@@ -59,7 +59,7 @@ fn main() {
     // Just to get rust-analyzer to be kinda useful, generate some all zero
     // constants if /secrets/secrets.json doesn't exist.
 
-    let secrets_path = Path::new("/secrets/secrets.json");
+    let secrets_path = Path::new("/global.secrets");
     if !secrets_path.exists() {
         println!("cargo::warning=secrets file does not exist, writing mock secrets.");
         fs::write(
