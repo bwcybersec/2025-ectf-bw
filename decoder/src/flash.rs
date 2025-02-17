@@ -4,14 +4,14 @@ use crate::host_comms::DecoderError;
 
 use core::fmt::Debug;
 
-pub const STORAGE_MAX: usize = 4096;
+pub const STORAGE_MAX: usize = 1024;
 pub const STORAGE_MAX_U32: u32 = STORAGE_MAX as u32;
 
 const PERSIST_BASE_ADDR: u32 = 0x10044000;
 const DATA_LEN_ADDR: u32 = PERSIST_BASE_ADDR + 4;
 const DATA_BASE_ADDR: u32 = DATA_LEN_ADDR + 4;
 
-const FLASH_INITIALIZED_MAGIC: u32 = 0x4d494b55;
+const FLASH_INITIALIZED_MAGIC: u32 = 0x4d696b75;
 
 #[derive(Debug)]
 pub enum DecoderStorageReadError {
@@ -19,12 +19,12 @@ pub enum DecoderStorageReadError {
     FlashLengthTooLarge,
     /// This error means that we got an error from the flash library.
     /// This is probably a logic bug.
-    FlashError(FlashError),
+    FlashError,
 }
 
 impl From<FlashError> for DecoderStorageReadError {
-    fn from(value: FlashError) -> Self {
-        Self::FlashError(value)
+    fn from(_: FlashError) -> Self {
+        Self::FlashError
     }
 }
 
@@ -32,12 +32,12 @@ impl From<FlashError> for DecoderStorageReadError {
 pub enum DecoderStorageWriteError {
     /// This error means that we got an error from the flash library.
     /// This is probably a logic bug.
-    FlashError(FlashError),
+    FlashError,
 }
 
 impl From<FlashError> for DecoderStorageWriteError {
-    fn from(value: FlashError) -> Self {
-        Self::FlashError(value)
+    fn from(_: FlashError) -> Self {
+        Self::FlashError
     }
 }
 
@@ -66,7 +66,7 @@ impl DecoderStorage {
 
         let read_magic = match storage.flc.read_32(PERSIST_BASE_ADDR) {
             Ok(x) => x,
-            Err(err) => return Err(DecoderStorageReadError::FlashError(err)),
+            Err(_) => return Err(DecoderStorageReadError::FlashError),
         };
 
         if read_magic != FLASH_INITIALIZED_MAGIC {
@@ -135,8 +135,11 @@ impl DecoderStorage {
         self.erase_page();
 
         let mut cursor = PERSIST_BASE_ADDR;
+        // Don't write the initialized magic here. This avoids a race condition
+        // where the power could be pulled mid-write, which hypothetically could
+        // lead to a channel key being set to all FF.
         let mut u32s_to_write = [
-            FLASH_INITIALIZED_MAGIC,
+            0xFFFFFFFF,
             self.buf.len() as u32,
             0xDEADBEEF,
             0xDEADBEEF,
@@ -168,6 +171,8 @@ impl DecoderStorage {
         u32s_to_write[i] = u32::from_ne_bytes(final_u32);
         self.flc.write_128(cursor, &u32s_to_write)?;
 
+        // we finished writing the flash, now write the flash initialized magic :)
+        self.flc.write_32(PERSIST_BASE_ADDR, FLASH_INITIALIZED_MAGIC)?;
         Ok(())
     }
 

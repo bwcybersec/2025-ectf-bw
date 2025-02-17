@@ -10,10 +10,21 @@
 //!
 //! The build script also sets the linker flags to tell it which link script to use.
 
-use std::env;
-use std::fs::File;
+use std::env::{self, var};
+use std::fs::{self, File};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use hkdf::Hkdf;
+use serde::Deserialize;
+use sha2::Sha256;
+
+#[derive(Deserialize)]
+struct Secrets {
+    deployment_key: String,
+    salt: String,
+    channel_0_key: String,
+}
 
 fn main() {
     // Put `memory.x` in our output directory and ensure it's
@@ -29,7 +40,8 @@ fn main() {
     // any file in the project changes. By specifying `memory.x`
     // here, we ensure the build script is only re-run when
     // `memory.x` is changed.
-    println!("cargo:rerun-if-changed=memory.x");
+    // println!("cargo:rerun-if-changed=memory.x");
+    // BW - Rerun every time, thinking about this is too hard
 
     // Specify linker arguments.
 
@@ -40,4 +52,45 @@ fn main() {
 
     // Set the linker script to the one provided by cortex-m-rt.
     println!("cargo:rustc-link-arg=-Tlink.x");
+
+    // Just to get rust-analyzer to be kinda useful, generate some all zero
+    // constants if /secrets/secrets.json doesn't exist.
+
+    let secrets_path = Path::new("/secrets/secrets.json");
+    if !secrets_path.exists() {
+        println!("cargo::warning=secrets file does not exist, writing mock secrets.");
+        fs::write(
+            out.join("gen_constants.rs"),
+            "const DECODER_KEY: Chacha20Key = [0; 32];\npub(crate) const CHANNEL_0_KEY: Chacha20Key = [0; 32];",
+        )
+        .expect("Failed to write constants");
+
+        return;
+    }
+
+    // Import secrets
+    let secrets_file = File::open(secrets_path).expect("couldn't open secrets");
+    let secrets: Secrets = serde_json::from_reader(secrets_file).expect("couldn't parse secrets");
+    let deployment_key =
+        hex::decode(secrets.deployment_key).expect("couldn't unhex deployment_key");
+    let salt = hex::decode(secrets.salt).expect("couldn't unhex salt");
+    let decoder_id = var("DECODER_ID").expect("DECODER_ID env var was not present");
+    let info = hex::decode(&decoder_id[2..]).expect("couldn't unhex the decoder id");
+    let channel_0_key = hex::decode(secrets.channel_0_key).expect("couldn't unhex channel_0_key");
+
+    // Derive the decoder key
+    let hk: Hkdf<_, _> = Hkdf::<Sha256>::new(Some(&salt[..]), &deployment_key);
+    let mut decoder_key: [u8; 32] = [0; 32];
+
+    hk.expand(&info, &mut decoder_key)
+        .expect("32 is a valid length for SHA256");
+
+    fs::write(
+        out.join("gen_constants.rs"),
+        format!(
+            "const DECODER_KEY: Chacha20Key = {:#?};\npub(crate) const CHANNEL_0_KEY: Chacha20Key = {:#?};",
+            decoder_key, channel_0_key
+        ),
+    )
+    .expect("Failed to write constants");
 }

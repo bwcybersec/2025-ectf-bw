@@ -12,9 +12,13 @@ Copyright: Copyright (c) 2025 The MITRE Corporation
 
 import argparse
 import json
+from os import urandom
 from pathlib import Path
 import struct
 
+from Crypto.Cipher import ChaCha20_Poly1305
+from Crypto.Hash import SHA256
+from Crypto.Protocol.KDF import HKDF
 from loguru import logger
 
 
@@ -42,8 +46,35 @@ def gen_subscription(
     # Which would return "EXAMPLE" in the reference design.
     # Please note that the secrets are READ ONLY at this sage!
 
+    deployment_key = bytes.fromhex(secrets["deployment_key"])
+    device_id_bytes = device_id.to_bytes(4)
+    salt = bytes.fromhex(secrets["salt"])
+
+    # derive the decoder key
+    decoder_key = HKDF(
+        master=deployment_key,
+        key_len=32,
+        salt=salt,
+        hashmod=SHA256,
+        num_keys=1,
+        context=device_id_bytes,
+    )
+
+    channel_key = bytes.fromhex(secrets["channel_keys"][str(channel)])
+
+    # logger.debug("decoder_key is "+decoder_key.hex())
+
+    # Pack the subscription
+    subscription_pt = struct.pack("<IQQ", channel, start, end) + channel_key
+
+    # Encrypt the subscription
+    nonce = urandom(24)
+    cipher = ChaCha20_Poly1305.new(key=decoder_key, nonce=nonce)
+    subscription_ct, tag = cipher.encrypt_and_digest(subscription_pt)
+
+    # logger.debug(f"ctlen: {len(subscription_ct)} ptlen {len(subscription_pt)}")
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
-    return struct.pack("<IQQI", device_id, start, end, channel)
+    return nonce + tag + subscription_ct
 
 
 def parse_args():

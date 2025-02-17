@@ -10,9 +10,12 @@ own risk!
 Copyright: Copyright (c) 2025 The MITRE Corporation
 """
 
+from Crypto.Cipher import ChaCha20_Poly1305
+
 import argparse
 import struct
 import json
+from os import urandom
 
 
 class Encoder:
@@ -29,9 +32,11 @@ class Encoder:
         # Load the json of the secrets file
         secrets = json.loads(secrets)
 
-        # Load the example secrets for use in Encoder.encode
-        # This will be "EXAMPLE" in the reference design"
-        self.some_secrets = secrets["some_secrets"]
+        # # Load the example secrets for use in Encoder.encode
+        # # This will be "EXAMPLE" in the reference design"
+        # self.some_secrets = secrets["some_secrets"]
+        self.channel_0_key = secrets["channel_0_key"]
+        self.channel_keys = secrets["channel_keys"]
 
     def encode(self, channel: int, frame: bytes, timestamp: int) -> bytes:
         """The frame encoder function
@@ -51,10 +56,20 @@ class Encoder:
 
         :returns: The encoded frame, which will be sent to the Decoder
         """
-        # TODO: encode the satellite frames so that they meet functional and
-        #  security requirements
 
-        return struct.pack("<IQ", channel, timestamp) + frame
+        channel_key = (
+            self.channel_0_key if channel == 0 else self.channel_keys[str(channel)]
+        )
+
+        channel_key = bytes.fromhex(channel_key)
+
+        payload_pt = struct.pack("<Q", timestamp) + frame
+
+        nonce = urandom(24)
+        cipher = ChaCha20_Poly1305.new(key=channel_key, nonce=nonce)
+        payload_ct, tag = cipher.encrypt_and_digest(payload_pt)
+
+        return struct.pack("<I", channel) + nonce + tag + payload_ct
 
 
 def main():

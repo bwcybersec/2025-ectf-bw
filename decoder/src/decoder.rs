@@ -1,16 +1,22 @@
+use core::cell::Cell;
+
 use postcard::{from_bytes, to_extend};
 use serde::{Deserialize, Serialize};
 
-use crate::{flash::DecoderStorage, host_comms::DecoderError};
+use crate::{
+    crypto::{decrypt_encrypted_packet, Chacha20Key, XChacha20Nonce, XChacha20Tag, CHANNEL_0_KEY},
+    flash::DecoderStorage,
+    host_comms::{DecoderConsole, DecoderError},
+};
 
 const MAX_SUBSCRIPTION_COUNT: usize = 8;
 
 /// This struct represents the concept of the decoder. It will decode frames
 /// that it has a valid subscription for, and can register more subscriptions.
-#[derive(Debug)]
 pub struct Decoder<'a> {
     subscriptions: [Option<Subscription>; MAX_SUBSCRIPTION_COUNT],
     storage: &'a mut DecoderStorage,
+    curr_time: Cell<Option<u64>>,
 }
 
 impl<'a> Decoder<'a> {
@@ -28,6 +34,7 @@ impl<'a> Decoder<'a> {
             decoder = Self {
                 subscriptions,
                 storage,
+                curr_time: Cell::new(None),
             };
         }
 
@@ -84,9 +91,61 @@ impl<'a> Decoder<'a> {
 
         Ok(())
     }
+
+    /// This decrypts and decodes a frame given the channel id and crypto parameters.
+    /// payload will be clobbered.
+    pub fn decode_frame(
+        &self,
+        channel_id: u32,
+        nonce: &XChacha20Nonce,
+        tag: &XChacha20Tag,
+        payload: &'a mut heapless::Vec<u8, 72>,
+    ) -> Result<&'a [u8], DecoderError> {
+        let start_time;
+        let end_time;
+        let channel_key;
+
+        if channel_id == 0 {
+            start_time = u64::MIN;
+            end_time = u64::MAX;
+            channel_key = &CHANNEL_0_KEY
+        } else {
+            match self.get_subscription(channel_id) {
+                Some(sub) => {
+                    start_time = sub.start_time;
+                    end_time = sub.end_time;
+                    channel_key = &sub.channel_key;
+                }
+                None => return Err(DecoderError::NoSubscription(channel_id)),
+            };
+        };
+
+        // console.print_debug(&alloc::format!("decode_frame chan {channel_id} {nonce:?} {tag:?} {payload:?}"));
+        decrypt_encrypted_packet(channel_key, nonce, tag, payload)
+            .or(Err(DecoderError::FailedDecryption))?;
+
+        let timestamp = u64::from_le_bytes(payload[0..8].try_into().expect("8 == 8"));
+        if timestamp < start_time || timestamp > end_time {
+            return Err(DecoderError::SubscriptionTimeMismatch(
+                channel_id, timestamp,
+            ));
+        }
+
+        let curr_time = self.curr_time.get();
+        if let Some(curr_time) = curr_time {
+            if curr_time > timestamp {
+                return Err(DecoderError::FrameOutOfOrder(timestamp, curr_time));
+            }
+        }
+
+        self.curr_time.set(Some(timestamp));
+
+        Ok(&payload[8..])
+    }
 }
 
-// Sigh.
+/// This helper type exists solely so that we can have Extend on a &mut to
+/// a heapless vec. Sigh.
 struct ExtendableHeaplessVecMut<'why, T, const N: usize> {
     the_reference: &'why mut heapless::Vec<T, N>,
 }
@@ -98,9 +157,10 @@ impl<T, const N: usize> Extend<T> for ExtendableHeaplessVecMut<'_, T, N> {
 }
 
 // Not Copy because it's potentially a bit big.
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct Subscription {
     pub channel_id: u32,
     pub start_time: u64,
     pub end_time: u64,
+    pub channel_key: Chacha20Key,
 }

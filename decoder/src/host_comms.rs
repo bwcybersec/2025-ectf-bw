@@ -4,6 +4,10 @@ use alloc::format;
 use hal::{pac::Uart0, uart::BuiltUartPeripheral};
 
 use crate::{
+    crypto::{
+        decrypt_decoder_encrypted_packet, CHACHA20_KEY_BYTES, ENCODER_CRYPTO_HEADER_LEN,
+        XCHACHA20_NONCE_BYTES, XCHACHA20_TAG_BYTES,
+    },
     decoder::{Decoder, Subscription},
     flash::DecoderStorageWriteError,
 };
@@ -23,7 +27,7 @@ pub enum DecoderError {
     NoMoreSubscriptionSpace,
     /// Decoder was sent a frame that claims to be more than 64 bytes
     FrameTooLarge(u16),
-    /// Decoder does not have a valid subscription for the given frame.
+    /// Decoder does not have a valid subscription for the given channel.
     NoSubscription(u32),
     /// Given timestamp does fall within the subscription time window.
     SubscriptionTimeMismatch(u32, u64),
@@ -31,6 +35,10 @@ pub enum DecoderError {
     SerializationFailed(postcard::Error),
     /// Saving the serialized data to flash failed
     SavingFailed(DecoderStorageWriteError),
+    /// Failed to decrypt an encrypted payload.
+    FailedDecryption,
+    /// Recieved a frame from the past. We refuse to replay it.
+    FrameOutOfOrder(u64, u64),
 }
 
 impl Display for DecoderError {
@@ -54,7 +62,9 @@ impl Display for DecoderError {
                 "Was asked to decode a frame for channel {} with timestamp {}, but that timestamp is invalid for our subscription.", channel_id, timestamp
             ),
             Self::SerializationFailed(err) => write!(f, "Attempted to serialize subscription updates for flash, and failed with error {err}"),
-            Self::SavingFailed(err) => write!(f, "Attempted to save subscription updates to flash, and failed with error {err:?}")
+            Self::SavingFailed(err) => write!(f, "Attempted to save subscription updates to flash, and failed with error {err:?}"),
+            Self::FailedDecryption => write!(f, "Failed to decrypt a encrypted payload. This can mean that you used a subscription for a different decoder, or that data was corrupted or tampered with."),
+            Self::FrameOutOfOrder(timestamp, curr_time) => write!(f, "Was asked to decode a frame with timestamp {timestamp}, but have already decoded a frame with timestamp {curr_time}"),
          }
     }
 }
@@ -63,6 +73,7 @@ impl DecoderError {
     pub fn write_to_console<RX, TX>(&self, console: &DecoderConsole<RX, TX>) {
         let message = format!("{self}");
         // heprintln!("{message}");
+        let _ = console.print_debug(&message);
         let _ = console.print_error(&message);
     }
 }
@@ -152,63 +163,77 @@ impl<RX, TX> DecoderConsole<RX, TX> {
     /// subscription object, ready to be inserted into the subscription list by
     /// the logical Decoder
     pub fn read_subscription(&self) -> Result<Subscription, DecoderError> {
+        const SUBSCRIPTION_SIZE: usize = 4 + 8 + 8 + CHACHA20_KEY_BYTES;
+
         let mut reader: DecoderPayloadReader<'_, RX, TX> = DecoderPayloadReader::new(&self);
 
-        let _decoder_id = reader.read_u32();
-        // TODO: Replace this with a secure implementation
-        let channel_id = reader.read_u32();
-        let start_time = reader.read_u64();
-        let end_time = reader.read_u64();
+        let mut nonce: [u8; XCHACHA20_NONCE_BYTES] = Default::default();
+        let mut tag: [u8; XCHACHA20_TAG_BYTES] = Default::default();
+        let mut body: [u8; SUBSCRIPTION_SIZE] = [0; SUBSCRIPTION_SIZE];
+
+        reader.read_bytes(&mut nonce);
+        reader.read_bytes(&mut tag);
+        reader.read_bytes(&mut body);
+        reader.finish_payload();
+
+        if let Err(_) = decrypt_decoder_encrypted_packet(&nonce, &tag, &mut body) {
+            return Err(DecoderError::FailedDecryption);
+        };
+
+        let channel_id = u32::from_le_bytes(body[0..4].try_into().expect("4 == 4"));
+        let start_time = u64::from_le_bytes(body[4..12].try_into().expect("8 == 8"));
+        let end_time = u64::from_le_bytes(body[12..20].try_into().expect("8 == 8"));
+        let channel_key: [u8; CHACHA20_KEY_BYTES] = body[20..]
+            .try_into()
+            .expect("subscription must be 4+8+8+CHACHA20_KEY_BYTES in length");
 
         Ok(Subscription {
             channel_id,
             start_time,
             end_time,
+            channel_key,
         })
     }
 
     /// Decode
     pub fn decode_frame(&self, decoder: &Decoder, packet_length: u16) -> Result<(), DecoderError> {
         let mut reader: DecoderPayloadReader<'_, RX, TX> = DecoderPayloadReader::new(&self);
-        // 4 bytes for the channel ID, 8 bytes for the timestamp
-        let frame_length = packet_length - 4 - 8;
+        // 4 bytes for the channel ID, 8 bytes for the timestamp, a crypto header
+        let frame_length = packet_length - 4 - 8 - (ENCODER_CRYPTO_HEADER_LEN) as u16;
+
+        // The payload contains the timestamp as well as the frame
+        let payload_length = frame_length + 8;
 
         if frame_length > 64 {
             return Err(DecoderError::FrameTooLarge(frame_length));
         }
 
         let channel_id = reader.read_u32();
-        let timestamp = reader.read_u64();
+        let mut nonce: [u8; XCHACHA20_NONCE_BYTES] = Default::default();
+        let mut tag: [u8; XCHACHA20_TAG_BYTES] = Default::default();
 
-        let sub = decoder.get_subscription(channel_id);
+        reader.read_bytes(&mut nonce);
+        reader.read_bytes(&mut tag);
 
-        match sub {
-            Some(sub) => {
-                if timestamp < sub.start_time || sub.end_time > timestamp {
-                    return Err(DecoderError::SubscriptionTimeMismatch(
-                        channel_id, timestamp,
-                    ));
-                }
+        // 72 because the frame could be 64, and the timestamp takes 8
+        let mut payload: heapless::Vec<u8, 72> = heapless::Vec::new();
+        reader.extend_with_n_bytes(&mut payload, payload_length as usize);
+        reader.finish_payload();
 
-                let mut frame_buf: heapless::Vec<u8, 64> = heapless::Vec::new();
-                let frame = &mut frame_buf[0..frame_length as usize];
-                reader.read_bytes(frame);
-                reader.finish_payload();
+        let frame = decoder.decode_frame(channel_id, &nonce, &tag, &mut payload)?;
 
-                // Write the frame back out
-                // Packet header
-                self.write_byte(b'%'); // magic byte
-                self.write_byte(b'D'); // message type
-                self.write_u16(frame_length); // message length
+        // Write out the frame.
+        self.write_byte(b'%'); // magic byte
+        self.write_byte(b'D'); // message type
+        self.write_u16(frame_length); // message length
 
-                let mut writer: DecoderPayloadWriter<'_, RX, TX> = DecoderPayloadWriter::new(&self);
-                writer.write_bytes(frame)?;
-                writer.finish_payload()?;
+        self.read_ack()?;
 
-                Ok(())
-            }
-            None => Err(DecoderError::NoSubscription(channel_id)),
-        }
+        let mut writer: DecoderPayloadWriter<'_, RX, TX> = DecoderPayloadWriter::new(&self);
+        writer.write_bytes(&frame)?;
+        writer.finish_payload()?;
+
+        Ok(())
     }
 
     // Error
@@ -276,10 +301,6 @@ impl<RX, TX> DecoderConsole<RX, TX> {
     fn write_u32(&self, val: u32) {
         self.0.write_bytes(&val.to_le_bytes())
     }
-
-    fn write_u64(&self, val: u64) {
-        self.0.write_bytes(&val.to_le_bytes())
-    }
 }
 
 /// This struct represents a payload being written to the wire.
@@ -312,10 +333,6 @@ impl<'a, RX, TX> DecoderPayloadWriter<'a, RX, TX> {
             self.write_byte(*byte)?
         }
         Ok(())
-    }
-
-    fn write_u16(&mut self, val: u16) -> Result<(), DecoderError> {
-        self.write_bytes(&val.to_le_bytes())
     }
 
     fn write_u32(&mut self, val: u32) -> Result<(), DecoderError> {
@@ -362,16 +379,14 @@ impl<'a, RX, TX> DecoderPayloadReader<'a, RX, TX> {
         }
     }
 
+    fn extend_with_n_bytes(&mut self, buf: &mut impl Extend<u8>, count: usize) {
+        buf.extend((0..count).map(|_| self.read_byte()));
+    }
+
     fn read_u32(&mut self) -> u32 {
         let mut bytes: [u8; 4] = Default::default();
         self.read_bytes(&mut bytes);
         u32::from_le_bytes(bytes)
-    }
-
-    fn read_u64(&mut self) -> u64 {
-        let mut bytes: [u8; 8] = Default::default();
-        self.read_bytes(&mut bytes);
-        u64::from_le_bytes(bytes)
     }
 
     fn finish_payload(self) {

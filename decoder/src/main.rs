@@ -7,6 +7,8 @@
 extern crate alloc;
 use flash::DecoderStorage;
 use hal::flc::Flc;
+use hal::icc::Icc;
+use led::LED;
 
 use core::ptr::addr_of_mut;
 
@@ -23,19 +25,22 @@ use panic_halt as _;
 use embedded_alloc::LlffHeap as Heap;
 
 mod cmd_logic;
+mod crypto;
 mod decoder;
 mod flash;
 mod host_comms;
+mod led;
+
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
 
 #[entry]
 fn main() -> ! {
-    // Allocate a very silly 8k of heap for formatting error and debug strings :)
+    // Allocate a very silly 4k of heap for formatting error and debug strings :)
     {
         use core::mem::MaybeUninit;
-        const HEAP_SIZE: usize = 8192;
+        const HEAP_SIZE: usize = 4096;
         static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
         unsafe { HEAP.init(addr_of_mut!(HEAP_MEM) as usize, HEAP_SIZE) }
     }
@@ -53,8 +58,8 @@ fn main() -> ! {
         .freeze();
 
     // Initialize a delay timer using the ARM SYST (SysTick) peripheral
-    // let rate = clks.sys_clk.frequency;
-    // let mut delay = cortex_m::delay::Delay::new(core.SYST, rate);
+    let rate = clks.sys_clk.frequency;
+    let mut delay = cortex_m::delay::Delay::new(core.SYST, rate);
 
     // Initialize and split the GPIO0 peripheral into pins
     let gpio0_pins = hal::gpio::Gpio0::new(p.gpio0, &mut gcr.reg).split();
@@ -82,23 +87,28 @@ fn main() -> ! {
     led_g.set_power_vddioh();
     led_b.set_power_vddioh();
 
-    led_r.set_high();
-    // led_g.set_high();
-    led_b.set_high();
+    let mut led = LED::new(led_r, led_g, led_b);
+
+    // Set light red: Initializing
+    led.red();
 
     let flc = Flc::new(p.flc, clks.sys_clk);
 
-    // heprintln!("Initializing decoder storage.");
+    let mut icc = Icc::new(p.icc0);
+
+    icc.disable();
     let mut storage = DecoderStorage::init(flc).unwrap();
 
-    // heprintln!("Initializing decoder.");
     let mut decoder: Decoder<'_> = Decoder::new(&mut storage);
     // dbg!(&decoder);
 
     let mut console = DecoderConsole(uart);
 
     loop {
-        if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder) {
+        // Set light green: Ready!
+        led.green();
+
+        if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder, &mut led) {
             err.write_to_console(&console);
         }
     }
