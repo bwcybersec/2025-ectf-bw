@@ -17,3 +17,8 @@ ensures that a pirate subscription cannot be decrypted by a given decoder.
     - Channel 0 key - This is a special case. This key is baked into each
     decoder alongside the Decoder Key, so that decoders can always decode
     emergency communications.
+
+- Signing Keypair - This keypair is used for creating cryptographic signatures
+of all encrypted payloads. This ensures that, even if a channel key or decoder
+key were to leak, the decoder can ensure that a message came from the genuine
+encoder.
