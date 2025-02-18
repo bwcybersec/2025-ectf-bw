@@ -1,18 +1,18 @@
-use core::fmt::Display;
+use core::fmt::{Debug, Display};
 
 use alloc::format;
 use hal::{pac::Uart0, uart::BuiltUartPeripheral};
 
 use crate::{
     crypto::{
-        decrypt_decoder_encrypted_packet, CHACHA20_KEY_BYTES, ENCODER_CRYPTO_HEADER_LEN,
-        XCHACHA20_NONCE_BYTES, XCHACHA20_TAG_BYTES,
+        decrypt_decoder_encrypted_packet, CHACHA20_KEY_BYTES, ED25519_SIGNATURE_BYTES,
+        ENCODER_CRYPTO_HEADER_LEN, XCHACHA20_NONCE_BYTES, XCHACHA20_TAG_BYTES,
     },
     decoder::{Decoder, Subscription},
     flash::DecoderStorageWriteError,
 };
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum DecoderMessageType {
     List,
     Subscribe,
@@ -78,6 +78,7 @@ impl DecoderError {
     }
 }
 
+#[derive(Debug)]
 pub struct DecoderPacketHeader {
     pub msg_type: DecoderMessageType,
     pub size: u16,
@@ -102,9 +103,13 @@ impl<RX, TX> DecoderConsole<RX, TX> {
             _ => return Err(cmd),
         };
 
+        
+        let size = self.read_u16();
+        self.write_ack();
+
         Ok(DecoderPacketHeader {
             msg_type,
-            size: self.read_u16(),
+            size,
         })
     }
 
@@ -169,14 +174,16 @@ impl<RX, TX> DecoderConsole<RX, TX> {
 
         let mut nonce: [u8; XCHACHA20_NONCE_BYTES] = Default::default();
         let mut tag: [u8; XCHACHA20_TAG_BYTES] = Default::default();
+        let mut signature: [u8; ED25519_SIGNATURE_BYTES] = [0; ED25519_SIGNATURE_BYTES];
         let mut body: [u8; SUBSCRIPTION_SIZE] = [0; SUBSCRIPTION_SIZE];
 
         reader.read_bytes(&mut nonce);
         reader.read_bytes(&mut tag);
+        reader.read_bytes(&mut signature);
         reader.read_bytes(&mut body);
         reader.finish_payload();
 
-        if let Err(_) = decrypt_decoder_encrypted_packet(&nonce, &tag, &mut body) {
+        if let Err(_) = decrypt_decoder_encrypted_packet(&nonce, &tag, &signature, &mut body) {
             return Err(DecoderError::FailedDecryption);
         };
 
@@ -211,16 +218,18 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         let channel_id = reader.read_u32();
         let mut nonce: [u8; XCHACHA20_NONCE_BYTES] = Default::default();
         let mut tag: [u8; XCHACHA20_TAG_BYTES] = Default::default();
+        let mut signature: [u8; ED25519_SIGNATURE_BYTES] = [0; ED25519_SIGNATURE_BYTES];
 
         reader.read_bytes(&mut nonce);
         reader.read_bytes(&mut tag);
+        reader.read_bytes(&mut signature);
 
         // 72 because the frame could be 64, and the timestamp takes 8
         let mut payload: heapless::Vec<u8, 72> = heapless::Vec::new();
         reader.extend_with_n_bytes(&mut payload, payload_length as usize);
         reader.finish_payload();
 
-        let frame = decoder.decode_frame(channel_id, &nonce, &tag, &mut payload)?;
+        let frame = decoder.decode_frame(channel_id, &nonce, &tag, &signature, &mut payload)?;
 
         // Write out the frame.
         self.write_byte(b'%'); // magic byte
