@@ -4,7 +4,10 @@ use postcard::{from_bytes, to_extend};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    crypto::{decrypt_encrypted_packet, Chacha20Key, XChacha20Nonce, XChacha20Tag, CHANNEL_0_KEY},
+    crypto::{
+        decrypt_encrypted_packet, Chacha20Key, Ed25519Signature, XChacha20Nonce, XChacha20Tag,
+        CHANNEL_0_KEY,
+    },
     flash::DecoderStorage,
     host_comms::{DecoderConsole, DecoderError},
 };
@@ -99,6 +102,7 @@ impl<'a> Decoder<'a> {
         channel_id: u32,
         nonce: &XChacha20Nonce,
         tag: &XChacha20Tag,
+        signature: &Ed25519Signature,
         payload: &'a mut heapless::Vec<u8, 72>,
     ) -> Result<&'a [u8], DecoderError> {
         let start_time;
@@ -121,7 +125,7 @@ impl<'a> Decoder<'a> {
         };
 
         // console.print_debug(&alloc::format!("decode_frame chan {channel_id} {nonce:?} {tag:?} {payload:?}"));
-        decrypt_encrypted_packet(channel_key, nonce, tag, payload)
+        decrypt_encrypted_packet(channel_key, nonce, tag, signature, payload)
             .or(Err(DecoderError::FailedDecryption))?;
 
         let timestamp = u64::from_le_bytes(payload[0..8].try_into().expect("8 == 8"));

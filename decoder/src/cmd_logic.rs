@@ -34,8 +34,6 @@ pub fn run_command<RX, TX>(
                         return Ok(());
                     }
 
-                    console.write_ack();
-
                     let subscriptions = decoder.get_subscriptions().iter().flatten();
                     console.send_list(subscriptions)?;
                 }
@@ -50,8 +48,6 @@ pub fn run_command<RX, TX>(
                         return Ok(());
                     }
 
-                    console.write_ack();
-
                     let sub = console.read_subscription()?;
 
                     decoder.register_subscription(sub)?;
@@ -60,8 +56,6 @@ pub fn run_command<RX, TX>(
                 }
                 DecoderMessageType::Decode => {
                     led.magenta();
-
-                    console.write_ack();
 
                     console.decode_frame(&decoder, hdr.size)?;
                 }
