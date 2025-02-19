@@ -23,7 +23,8 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     curl \
     libtool \
     texinfo \
-    unzip
+    unzip \
+    python-is-python3
 
 
 # BW: Setup rust
