@@ -31,6 +31,7 @@ mod decoder;
 mod flash;
 mod host_comms;
 mod led;
+mod timer;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
@@ -60,7 +61,7 @@ fn main() -> ! {
     // Initialize a delay timer using the ARM SYST (SysTick) peripheral
     let rate = clks.sys_clk.frequency;
     let mut delay = cortex_m::delay::Delay::new(core.SYST, rate);
-
+    
     // Initialize and split the GPIO0 peripheral into pins
     let gpio0_pins = hal::gpio::Gpio0::new(p.gpio0, &mut gcr.reg).split();
     // Configure UART to host computer with 115200 8N1 settings
