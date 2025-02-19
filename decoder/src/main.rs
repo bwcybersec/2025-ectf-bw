@@ -9,7 +9,9 @@ use crypto::bootstrap_crypto;
 use flash::DecoderStorage;
 use hal::flc::Flc;
 use hal::icc::Icc;
+use host_comms::DecoderError;
 use led::LED;
+use timer::DecoderClock;
 
 use core::ptr::addr_of_mut;
 
@@ -31,6 +33,7 @@ mod decoder;
 mod flash;
 mod host_comms;
 mod led;
+mod timer;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
@@ -59,7 +62,9 @@ fn main() -> ! {
 
     // Initialize a delay timer using the ARM SYST (SysTick) peripheral
     let rate = clks.sys_clk.frequency;
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, rate);
+
+    // let mut delay = cortex_m::delay::Delay::new(core.SYST, rate);
+    let mut timer = DecoderClock::init(p.tmr0);
 
     // Initialize and split the GPIO0 peripheral into pins
     let gpio0_pins = hal::gpio::Gpio0::new(p.gpio0, &mut gcr.reg).split();
@@ -110,8 +115,23 @@ fn main() -> ! {
         // Set light green: Ready!
         led.green();
 
-        if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder, &mut led) {
+        if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder, &mut led, &mut timer) {
             err.write_to_console(&console);
+            use DecoderError as DE;
+            match err {
+                DE::FrameTooLarge(_) |
+                DE::NoSubscription(_) |
+                DE::SubscriptionTimeMismatch(_, _) |
+                DE::FailedDecryption |
+                DE::FrameOutOfOrder(_, _)  => {
+                    // Security related errors, wait out the whole 5 seconds.
+                    led.red();
+                    timer.wait_for_max_transaction_time();
+                },
+                _ => {
+                    // Non security related errors
+                }
+            }
         }
     }
 }

@@ -4,7 +4,7 @@ use crate::{
     crypto::{CHACHA20_KEY_BYTES, ENCODER_CRYPTO_HEADER_LEN},
     decoder::Decoder,
     host_comms::{DecoderConsole, DecoderError, DecoderMessageType},
-    led::LED,
+    led::LED, timer::{ClockInstant, DecoderClock},
 };
 
 // 4 for channel number
@@ -19,8 +19,12 @@ pub fn run_command<RX, TX>(
     console: &mut DecoderConsole<RX, TX>,
     decoder: &mut Decoder,
     led: &mut LED,
+    clock: &mut DecoderClock,
 ) -> Result<(), DecoderError> {
-    match console.read_command_header() {
+    let hdr = console.read_command_header();
+    // We read the header, transaction time starts now.
+    clock.start_transaction();
+    match hdr {
         Ok(hdr) => {
             match hdr.msg_type {
                 DecoderMessageType::List => {
