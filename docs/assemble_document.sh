@@ -1,3 +1,3 @@
 #!/bin/bash
-pandoc -t markdown -o designdoc.md -F mermaid-filter 1-introduction.md 2-protocol.md 3-secrets.md 4-storage.md 5-secreqs.md 
+pandoc -t markdown -o designdoc.md -F mermaid-filter 1-introduction.md 2-protocol.md 3-secrets.md 4-secreqs.md 5-storage.md 
 pandoc -t pdf --pdf-engine tectonic -F mermaid-filter -o designdoc.pdf designdoc.md
