@@ -97,8 +97,8 @@ fn main() {
     // Note for the reader:
     // sk -> secret key (this does not go to the decoder)
     // vk -> verifying key (this goes to the decoder)
-    let signing_sk =
-        SigningKey::from_pkcs8_pem(&secrets.signing_sk).expect("couldn't import signing_sk");
+    let signing_sk_bytes = hex::decode(secrets.signing_sk).expect("couldn't unhex signing_sk");
+    let signing_sk = SigningKey::from_bytes(&signing_sk_bytes.try_into().expect("signing_sk wasn't the right length"));
     let signing_vk = signing_sk.verifying_key();
 
     assert!(!signing_vk.is_weak(), "How is our signing key weak?");

@@ -11,9 +11,7 @@ Copyright: Copyright (c) 2025 The MITRE Corporation
 """
 
 from Crypto.Cipher import ChaCha20_Poly1305
-from Crypto.PublicKey import ECC
-from Crypto.Signature import eddsa
-
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 import argparse
 import struct
 import json
@@ -34,13 +32,11 @@ class Encoder:
         # Load the json of the secrets file
         secrets = json.loads(secrets)
 
-        # # Load the example secrets for use in Encoder.encode
-        # # This will be "EXAMPLE" in the reference design"
-        # self.some_secrets = secrets["some_secrets"]
+        # Load the secrets
         self.channel_0_key = secrets["channel_0_key"]
         self.channel_keys = secrets["channel_keys"]
 
-        self.signing_sk = ECC.import_key(secrets["signing_sk"])
+        self.signing_sk = Ed25519PrivateKey.from_private_bytes(bytes.fromhex(secrets["signing_sk"]))
 
 
     def encode(self, channel: int, frame: bytes, timestamp: int) -> bytes:
@@ -76,8 +72,7 @@ class Encoder:
         payload_ct, tag = cipher.encrypt_and_digest(payload_pt)
 
         # Sign the frame
-        signer = eddsa.new(key=self.signing_sk, mode="rfc8032")
-        signature = signer.sign(payload_pt)
+        signature = self.signing_sk.sign(payload_pt)
 
         return struct.pack("<I", channel) + nonce + tag + signature + payload_ct
 
