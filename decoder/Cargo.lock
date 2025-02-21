@@ -221,6 +221,7 @@ dependencies = [
  "chacha20poly1305",
  "cortex-m",
  "cortex-m-rt",
+ "critical-section",
  "ed25519-dalek",
  "embedded-alloc",
  "embedded-hal-nb",

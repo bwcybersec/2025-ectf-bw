@@ -9,7 +9,10 @@ use crypto::bootstrap_crypto;
 use flash::DecoderStorage;
 use hal::flc::Flc;
 use hal::icc::Icc;
+use hal::pac::Gcr;
+use host_comms::DecoderError;
 use led::LED;
+use timer::DecoderClock;
 
 use core::ptr::addr_of_mut;
 
@@ -21,7 +24,6 @@ pub use hal::pac;
 use host_comms::DecoderConsole;
 
 use panic_halt as _;
-// use panic_semihosting as _;
 
 use embedded_alloc::LlffHeap as Heap;
 
@@ -31,6 +33,7 @@ mod decoder;
 mod flash;
 mod host_comms;
 mod led;
+mod timer;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
@@ -45,10 +48,9 @@ fn main() -> ! {
         unsafe { HEAP.init(addr_of_mut!(HEAP_MEM) as usize, HEAP_SIZE) }
     }
 
-    // heprintln!("Hello from semihosting!");
     let p = pac::Peripherals::take().unwrap();
-    let core = pac::CorePeripherals::take().unwrap();
 
+    // Set the system clock to the IPO
     let mut gcr = hal::gcr::Gcr::new(p.gcr, p.lpgcr);
     let ipo = hal::gcr::clocks::Ipo::new(gcr.osc_guards.ipo).enable(&mut gcr.reg);
     let clks = gcr
@@ -57,9 +59,19 @@ fn main() -> ! {
         .set_divider::<hal::gcr::clocks::Div1>(&mut gcr.reg)
         .freeze();
 
-    // Initialize a delay timer using the ARM SYST (SysTick) peripheral
-    let rate = clks.sys_clk.frequency;
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, rate);
+    // Enable the TMR0 clock
+    // Safety:
+    // There is no HAL implementation of TMR0.
+    // No other code enables or disables the TMR0 clock.
+    // We're in a critical section, so nothing else can modify the GCR
+    // We drop the stolen GCR at the end of this scope
+    unsafe {
+        critical_section::with(|_cs| {
+            let stolen_gcr = Gcr::steal();
+            stolen_gcr.pclkdis0().modify(|_, w| w.tmr0().clear_bit());
+            drop(stolen_gcr);
+        });
+    };
 
     // Initialize and split the GPIO0 peripheral into pins
     let gpio0_pins = hal::gpio::Gpio0::new(p.gpio0, &mut gcr.reg).split();
@@ -72,9 +84,6 @@ fn main() -> ! {
         .parity(hal::uart::ParityBit::None)
         .build();
 
-    // uart.write_bytes(b"Hello, world!\r\n");
-
-    // heprintln!("LEDs should be on");
     // Initialize the GPIO2 peripheral
     let pins = hal::gpio::Gpio2::new(p.gpio2, &mut gcr.reg).split();
     // Enable output mode for the RGB LED pins
@@ -82,11 +91,11 @@ fn main() -> ! {
     let mut led_g = pins.p2_1.into_input_output();
     let mut led_b = pins.p2_2.into_input_output();
     // Use VDDIOH as the power source for the RGB LED pins (3.0V)
-    // Note: This HAL API may change in the future
     led_r.set_power_vddioh();
     led_g.set_power_vddioh();
     led_b.set_power_vddioh();
 
+    // Set up our abstraction around the LED
     let mut led = LED::new(led_r, led_g, led_b);
 
     // Set light red: Initializing
@@ -94,23 +103,40 @@ fn main() -> ! {
 
     let flc = Flc::new(p.flc, clks.sys_clk);
 
+    // Working with the flash needs the ICC disabled, so we ensure that here
     let mut icc = Icc::new(p.icc0);
-
     icc.disable();
+
+    // Initialize our types
+    let mut timer = DecoderClock::new(p.tmr0);
     let mut storage = DecoderStorage::init(flc).unwrap();
-
-    let mut decoder: Decoder<'_> = Decoder::new(&mut storage);
-    // dbg!(&decoder);
-
+    let mut decoder = Decoder::new(&mut storage);
     let mut console = DecoderConsole(uart);
 
+    // This preinitializes the VerifyingKey OnceCell, which would
+    // otherwise be initialized on the first message received.
     bootstrap_crypto();
 
     loop {
         // Set light green: Ready!
         led.green();
 
-        if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder, &mut led) {
+        if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder, &mut led, &mut timer) {
+            use DecoderError as DE;
+            match err {
+                DE::FrameTooLarge(_)
+                | DE::NoSubscription(_)
+                | DE::SubscriptionTimeMismatch(_, _)
+                | DE::FailedDecryption
+                | DE::FrameOutOfOrder(_, _) => {
+                    // Security related errors, wait out the whole 5 seconds.
+                    led.red();
+                    timer.wait_for_max_transaction_time();
+                }
+                _ => {
+                    // Non security related errors
+                }
+            }
             err.write_to_console(&console);
         }
     }

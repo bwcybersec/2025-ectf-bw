@@ -103,14 +103,10 @@ impl<RX, TX> DecoderConsole<RX, TX> {
             _ => return Err(cmd),
         };
 
-        
         let size = self.read_u16();
         self.write_ack();
 
-        Ok(DecoderPacketHeader {
-            msg_type,
-            size,
-        })
+        Ok(DecoderPacketHeader { msg_type, size })
     }
 
     // ACK

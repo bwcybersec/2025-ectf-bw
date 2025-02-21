@@ -22,6 +22,7 @@ serde = { version = "1.0.*", default-features = false }
 chacha20poly1305 = { version = "0.10.1", default-features = false, features = ["heapless"] }
 ed25519-dalek = { version = "2", default-features = false }
 once_cell = { version = "1.20", default-features = false, features = ["critical-section"] }
+critical-section = "1.2.0"
 
 [build-dependencies]
 serde = { version = "1.0", features = ["derive"] }
