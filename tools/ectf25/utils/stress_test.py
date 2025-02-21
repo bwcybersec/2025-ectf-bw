@@ -99,10 +99,12 @@ def test_decoder(args):
     ]
 
     logger.info("Running stress test...")
+    total_frame_len = 0
     start = time.perf_counter()
     for frame in tqdm(frames):
         try:
-            decoder.decode(frame.data)
+            frame_data = decoder.decode(frame.data)
+            total_frame_len += len(frame_data)
         except Exception as e:
             logger.error(f"Errored on frame {frame}!")
             raise e
@@ -110,7 +112,7 @@ def test_decoder(args):
 
     # Check threshold
     kb_threshold = args.threshold / 1000
-    kb_throughput = args.test_size / total / 1000
+    kb_throughput = total_frame_len / total / 1000
     if kb_throughput < kb_threshold:
         logger.error(
             f"Throughput too slow! {kb_throughput:,.2f} KBps < {kb_threshold:,.2f} KBps"
@@ -134,7 +136,7 @@ def parse_args():
     parser.add_argument(
         "--channels",
         "-c",
-        action="append",
+        nargs="+",
         type=int,
         default=[0, 1, 2, 3],
         help="Channels to randomly chose from (NOTE: 0 is broadcast)",
@@ -144,7 +146,7 @@ def parse_args():
 
     encode_parser = subparsers.add_parser("encode", help="Test the encoder")
     encode_parser.set_defaults(tester=test_encoder)
-    encode_parser.set_defaults(threshold=1_000.0)
+    encode_parser.set_defaults(threshold=64_000.0)
     encode_parser.add_argument(
         "secrets", type=argparse.FileType("rb"), help="Path to the secrets file"
     )
@@ -157,7 +159,7 @@ def parse_args():
 
     decode_parser = subparsers.add_parser("decode", help="Test the decoder")
     decode_parser.set_defaults(tester=test_decoder)
-    decode_parser.set_defaults(threshold=10.0)
+    decode_parser.set_defaults(threshold=640.0)
     decode_parser.add_argument(
         "port",
         help="Serial port to the Decoder (See https://rules.ectf.mitre.org/2025/getting_started/boot_reference for platform-specific instructions)",
