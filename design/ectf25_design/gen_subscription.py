@@ -63,7 +63,9 @@ def gen_subscription(
 
     channel_key = bytes.fromhex(secrets["channel_keys"][str(channel)])
 
-    signing_sk = Ed25519PrivateKey.from_private_bytes(bytes.fromhex(secrets["signing_sk"]))
+    signing_sk = Ed25519PrivateKey.from_private_bytes(
+        bytes.fromhex(secrets["signing_sk"])
+    )
 
     # Pack the subscription
     subscription_pt = struct.pack("<IQQ", channel, start, end) + channel_key

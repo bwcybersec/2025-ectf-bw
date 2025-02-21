@@ -36,8 +36,9 @@ class Encoder:
         self.channel_0_key = secrets["channel_0_key"]
         self.channel_keys = secrets["channel_keys"]
 
-        self.signing_sk = Ed25519PrivateKey.from_private_bytes(bytes.fromhex(secrets["signing_sk"]))
-
+        self.signing_sk = Ed25519PrivateKey.from_private_bytes(
+            bytes.fromhex(secrets["signing_sk"])
+        )
 
     def encode(self, channel: int, frame: bytes, timestamp: int) -> bytes:
         """The frame encoder function

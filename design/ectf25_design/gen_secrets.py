@@ -48,7 +48,7 @@ def gen_secrets(channels: list[int]) -> bytes:
         "channel_0_key": os.urandom(32).hex(),
         "channel_keys": {channel: os.urandom(32).hex() for channel in channels},
         "salt": os.urandom(32).hex(),
-        "signing_sk": signing_sk.private_bytes_raw().hex()
+        "signing_sk": signing_sk.private_bytes_raw().hex(),
     }
 
     # NOTE: if you choose to use JSON for your file type, you will not be able to
