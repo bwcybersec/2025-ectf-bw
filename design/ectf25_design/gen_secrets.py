@@ -17,6 +17,7 @@ from base64 import b64encode
 from pathlib import Path
 
 from Crypto.PublicKey import ECC
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from loguru import logger
 
 
@@ -35,7 +36,7 @@ def gen_secrets(channels: list[int]) -> bytes:
 
     # Generate the signing key.
 
-    signing_sk = ECC.generate(curve="ed25519")
+    signing_sk = Ed25519PrivateKey.generate()
 
     # Create the secrets object
     # You can change this to generate any secret material
@@ -47,7 +48,7 @@ def gen_secrets(channels: list[int]) -> bytes:
         "channel_0_key": os.urandom(32).hex(),
         "channel_keys": {channel: os.urandom(32).hex() for channel in channels},
         "salt": os.urandom(32).hex(),
-        "signing_sk": signing_sk.export_key(format="PEM")
+        "signing_sk": signing_sk.private_bytes_raw().hex()
     }
 
     # NOTE: if you choose to use JSON for your file type, you will not be able to

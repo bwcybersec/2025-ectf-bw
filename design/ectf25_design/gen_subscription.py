@@ -19,8 +19,7 @@ import struct
 from Crypto.Cipher import ChaCha20_Poly1305
 from Crypto.Hash import SHA256
 from Crypto.Protocol.KDF import HKDF
-from Crypto.PublicKey import ECC
-from Crypto.Signature import eddsa
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from loguru import logger
 
 
@@ -64,9 +63,7 @@ def gen_subscription(
 
     channel_key = bytes.fromhex(secrets["channel_keys"][str(channel)])
 
-    signing_sk = ECC.import_key(secrets["signing_sk"])
-
-    # logger.debug("decoder_key is "+decoder_key.hex())
+    signing_sk = Ed25519PrivateKey.from_private_bytes(bytes.fromhex(secrets["signing_sk"]))
 
     # Pack the subscription
     subscription_pt = struct.pack("<IQQ", channel, start, end) + channel_key
@@ -77,8 +74,7 @@ def gen_subscription(
     subscription_ct, tag = cipher.encrypt_and_digest(subscription_pt)
 
     # Sign the subscription
-    signer = eddsa.new(key=signing_sk, mode="rfc8032")
-    signature = signer.sign(subscription_pt)
+    signature = signing_sk.sign(subscription_pt)
 
     # logger.debug(f"ctlen: {len(subscription_ct)} ptlen {len(subscription_pt)}")
     # Pack the subscription. This will be sent to the decoder with ectf25.tv.subscribe
