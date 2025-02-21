@@ -9,7 +9,7 @@ use crate::{
         CHANNEL_0_KEY,
     },
     flash::DecoderStorage,
-    host_comms::{DecoderConsole, DecoderError},
+    host_comms::DecoderError,
 };
 
 const MAX_SUBSCRIPTION_COUNT: usize = 8;
