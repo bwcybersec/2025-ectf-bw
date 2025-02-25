@@ -1,5 +1,3 @@
-use alloc::format;
-
 use crate::{
     crypto::{CHACHA20_KEY_BYTES, ENCODER_CRYPTO_HEADER_LEN},
     decoder::Decoder,
@@ -35,8 +33,7 @@ pub fn run_command<RX, TX>(
                     // No body to read, just ACK the header
                     if hdr.size != 0 {
                         // ERROR: List msg packet should not have a payload.
-                        let _ = console.print_error(&format!("List message packet should not have a body, but had a body of {} bytes", hdr.size));
-                        return Ok(());
+                        return Err(DecoderError::PacketWrongSize);
                     }
 
                     let subscriptions = decoder.get_subscriptions().iter().flatten();
@@ -46,11 +43,8 @@ pub fn run_command<RX, TX>(
                     led.yellow();
 
                     if hdr.size != SUBSCRIPTION_MESSAGE_SIZE {
-                        let _ = console.print_error(&format!(
-                            "Subscription message should have a size of {}, was {}",
-                            SUBSCRIPTION_MESSAGE_SIZE, hdr.size
-                        ));
-                        return Ok(());
+                        // ERROR: Subscriptions should have a consistent size.
+                        return Err(DecoderError::PacketWrongSize);
                     }
 
                     let sub = console.read_subscription()?;
@@ -66,10 +60,7 @@ pub fn run_command<RX, TX>(
                 }
             }
         }
-        Err(err) => {
-            let _ =
-                console.print_error(&format!("Expected a L, S, or D command, got byte {}", err));
-        }
+        Err(_) => return Err(DecoderError::InvalidCommand),
     };
 
     Ok(())

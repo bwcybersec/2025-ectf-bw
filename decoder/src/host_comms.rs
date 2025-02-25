@@ -1,6 +1,3 @@
-use core::fmt::{Debug, Display};
-
-use alloc::format;
 use hal::{pac::Uart0, uart::BuiltUartPeripheral};
 
 use crate::{
@@ -12,14 +9,13 @@ use crate::{
     flash::DecoderStorageWriteError,
 };
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq)]
 pub enum DecoderMessageType {
     List,
     Subscribe,
     Decode,
 }
 
-#[derive(Debug)]
 pub enum DecoderError {
     /// Decoder expected an ACK in the protocol, but got something else.
     ExpectedAckButGot(u8),
@@ -39,6 +35,8 @@ pub enum DecoderError {
     FailedDecryption,
     /// Recieved a frame from the past. We refuse to replay it.
     FrameOutOfOrder(u64, u64),
+    PacketWrongSize,
+    InvalidCommand,
 }
 
 impl DecoderError {
@@ -53,6 +51,8 @@ impl DecoderError {
             Self::SavingFailed(err) => "Failed to save subscriptions to flash",
             Self::FailedDecryption => "Failed to decrypt a encrypted payload. This can mean that you used a subscription for a different decoder, or that your message was corrupted or tampered with.",
             Self::FrameOutOfOrder(timestamp, curr_time) => "Was asked to decode a frame with timestamp in the past",
+            Self::PacketWrongSize => "Received a packet which has a constant expected size with an invalid size for the packet type",
+            Self::InvalidCommand => "Received a command with a type byte that is not L, S, or D",
         }
     }
 
@@ -63,7 +63,6 @@ impl DecoderError {
     }
 }
 
-#[derive(Debug)]
 pub struct DecoderPacketHeader {
     pub msg_type: DecoderMessageType,
     pub size: u16,
