@@ -1,5 +1,6 @@
 use hal::gpio::{InputOutput, Pin};
 
+/// Reprsentation of the RGB LED, giving it some functions to set the color
 pub struct LED {
     led_r: Pin<2, 0, InputOutput>,
     led_g: Pin<2, 1, InputOutput>,

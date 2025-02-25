@@ -6,9 +6,9 @@ use crate::{
         ENCODER_CRYPTO_HEADER_LEN, XCHACHA20_NONCE_BYTES, XCHACHA20_TAG_BYTES,
     },
     decoder::{Decoder, Subscription},
-    flash::DecoderStorageWriteError,
 };
 
+/// The types of message that the decoder will receive.
 #[derive(PartialEq, Eq)]
 pub enum DecoderMessageType {
     List,
@@ -18,44 +18,48 @@ pub enum DecoderMessageType {
 
 pub enum DecoderError {
     /// Decoder expected an ACK in the protocol, but got something else.
-    ExpectedAckButGot(u8),
+    ExpectedAckButGotOther,
     /// Decoder has run out of subscription space.
     NoMoreSubscriptionSpace,
     /// Decoder was sent a frame that claims to be more than 64 bytes
-    FrameTooLarge(u16),
+    FrameTooLarge,
     /// Decoder does not have a valid subscription for the given channel.
-    NoSubscription(u32),
+    NoSubscription,
     /// Given timestamp does fall within the subscription time window.
-    SubscriptionTimeMismatch(u32, u64),
+    SubscriptionTimeMismatch,
     /// Serialization failed while trying to write subscription update to flash.
-    SerializationFailed(postcard::Error),
+    SerializationFailed,
     /// Saving the serialized data to flash failed
-    SavingFailed(DecoderStorageWriteError),
+    SavingFailed,
     /// Failed to decrypt an encrypted payload.
     FailedDecryption,
     /// Recieved a frame from the past. We refuse to replay it.
-    FrameOutOfOrder(u64, u64),
+    FrameOutOfOrder,
+    /// Recieved a packet which should have a consistent size that had a different size
     PacketWrongSize,
+    /// Recieved a packet with an invalid command byte.
     InvalidCommand,
 }
 
 impl DecoderError {
+    /// Get the message to be sent to console when this error is received
     fn message(&self) -> &str {
         match self {
-            Self::ExpectedAckButGot(byte) => "Expected ACK but got unexpected byte",
+            Self::ExpectedAckButGotOther => "Expected ACK but got unexpected byte",
             Self::NoMoreSubscriptionSpace => "Attempted to add a subscription, but subscription space is full",
-            Self::FrameTooLarge(frame_size) => "Was asked to decode a frame which is larger than 64 bytes",
-            Self::NoSubscription(channel_id) => "Was asked to decode a frame for channel that we have no subscription for",
-            Self::SubscriptionTimeMismatch(channel_id, timestamp) => "Was asked to decode a frame with timestamp thats invalid for our subscription.",
-            Self::SerializationFailed(err) => "Failed to serialize subscription updates for flash",
-            Self::SavingFailed(err) => "Failed to save subscriptions to flash",
+            Self::FrameTooLarge => "Was asked to decode a frame which is larger than 64 bytes",
+            Self::NoSubscription => "Was asked to decode a frame for channel that we have no subscription for",
+            Self::SubscriptionTimeMismatch => "Was asked to decode a frame with timestamp thats invalid for our subscription.",
+            Self::SerializationFailed => "Failed to serialize subscription updates for flash",
+            Self::SavingFailed=> "Failed to save subscriptions to flash",
             Self::FailedDecryption => "Failed to decrypt a encrypted payload. This can mean that you used a subscription for a different decoder, or that your message was corrupted or tampered with.",
-            Self::FrameOutOfOrder(timestamp, curr_time) => "Was asked to decode a frame with timestamp in the past",
+            Self::FrameOutOfOrder => "Was asked to decode a frame with timestamp in the past",
             Self::PacketWrongSize => "Received a packet which has a constant expected size with an invalid size for the packet type",
             Self::InvalidCommand => "Received a command with a type byte that is not L, S, or D",
         }
     }
 
+    /// Write this error to a given console
     pub fn write_to_console<RX, TX>(&self, console: &DecoderConsole<RX, TX>) {
         let message = self.message();
         let _ = console.print_debug(&message);
@@ -101,7 +105,7 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         self.read_until_magic();
         match self.read_byte() {
             b'A' => Ok(()),
-            byte => Err(DecoderError::ExpectedAckButGot(byte)),
+            _ => Err(DecoderError::ExpectedAckButGotOther),
         }
     }
 
@@ -144,9 +148,8 @@ impl<RX, TX> DecoderConsole<RX, TX> {
     }
 
     // Subscription
-    /// This function takes a subscription off the wire, and returns a
-    /// subscription object, ready to be inserted into the subscription list by
-    /// the logical Decoder
+    /// Takes a subscription off the wire, and returns a subscription object,
+    /// ready to be inserted into the subscription list by the Decoder
     pub fn read_subscription(&self) -> Result<Subscription, DecoderError> {
         const SUBSCRIPTION_SIZE: usize = 4 + 8 + 8 + CHACHA20_KEY_BYTES;
 
@@ -182,7 +185,9 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         })
     }
 
-    /// Decode
+    // Decode
+    /// Reads a Decode Frame packet off the wire, extracting the fields for the
+    /// crypto header, decrypts it, then writes the resulting frame back out.
     pub fn decode_frame(&self, decoder: &Decoder, packet_length: u16) -> Result<(), DecoderError> {
         let mut reader: DecoderPayloadReader<'_, RX, TX> = DecoderPayloadReader::new(&self);
         // 4 bytes for the channel ID, 8 bytes for the timestamp, a crypto header
@@ -192,7 +197,7 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         let payload_length = frame_length + 8;
 
         if frame_length > 64 {
-            return Err(DecoderError::FrameTooLarge(frame_length));
+            return Err(DecoderError::FrameTooLarge);
         }
 
         let channel_id = reader.read_u32();
@@ -225,7 +230,8 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         Ok(())
     }
 
-    // Error
+    // Debug
+    /// Sends a message to the host tools using the debug message type
     pub fn print_debug(&self, message: &str) {
         let message = message.as_bytes();
         self.write_byte(b'%'); // magic byte
@@ -236,6 +242,10 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         self.0.write_bytes(message);
     }
 
+    // Error
+    /// Sends an error message to the host tools.
+    ///
+    /// THIS CLOSES THE HOST TOOL.
     pub fn print_error(&self, message: &str) -> Result<(), DecoderError> {
         let message = message.as_bytes();
         self.write_byte(b'%'); // magic byte
@@ -251,6 +261,7 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         Ok(())
     }
 
+    /// Send an empty payload with a particular type to the host tools.
     pub fn send_empty_payload(&self, msg_type: u8) -> Result<(), DecoderError> {
         self.write_byte(b'%');
         self.write_byte(msg_type);
@@ -271,13 +282,11 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         u16::from_le_bytes(u16_bytes)
     }
 
+    /// Waits until UART receives the magic % byte, consuming bytes as it goes.
     fn read_until_magic(&self) {
-        loop {
-            if self.0.read_byte() == b'%' {
-                break;
-            }
-        }
+        while self.0.read_byte() != b'%' {}
     }
+
     // writes
     fn write_byte(&self, val: u8) {
         self.0.write_byte(val)
@@ -338,7 +347,7 @@ impl<'a, RX, TX> DecoderPayloadWriter<'a, RX, TX> {
 }
 
 /// This struct represents a payload being read from the wire.
-/// It handles expecting an ACK for every 256 bytes, as well as for the
+/// It handles writing an ACK for every 256 bytes, as well as for the
 /// last block.
 struct DecoderPayloadReader<'a, RX, TX> {
     bytes_read: usize,

@@ -71,6 +71,7 @@ impl<'a> Decoder<'a> {
         Err(DecoderError::NoMoreSubscriptionSpace)
     }
 
+    /// Get the subscription for a given channel_id, if there is any.
     pub fn get_subscription(&self, channel_id: u32) -> Option<&Subscription> {
         self.subscriptions
             .iter()
@@ -86,7 +87,7 @@ impl<'a> Decoder<'a> {
             let buf = ExtendableHeaplessVecMut { the_reference: buf };
             match to_extend(&self.subscriptions, buf) {
                 Ok(_) => {}
-                Err(err) => return Err(DecoderError::SerializationFailed(err)),
+                Err(_) => return Err(DecoderError::SerializationFailed),
             };
         }
 
@@ -95,8 +96,8 @@ impl<'a> Decoder<'a> {
         Ok(())
     }
 
-    /// This decrypts and decodes a frame given the channel id and crypto parameters.
-    /// payload will be clobbered.
+    /// Decrypts and decodes a frame given the channel id and crypto parameters.
+    /// payload will be reused for the frame contents.
     pub fn decode_frame(
         &self,
         channel_id: u32,
@@ -120,7 +121,7 @@ impl<'a> Decoder<'a> {
                     end_time = sub.end_time;
                     channel_key = &sub.channel_key;
                 }
-                None => return Err(DecoderError::NoSubscription(channel_id)),
+                None => return Err(DecoderError::NoSubscription),
             };
         };
 
@@ -130,15 +131,13 @@ impl<'a> Decoder<'a> {
 
         let timestamp = u64::from_le_bytes(payload[0..8].try_into().expect("8 == 8"));
         if timestamp < start_time || timestamp > end_time {
-            return Err(DecoderError::SubscriptionTimeMismatch(
-                channel_id, timestamp,
-            ));
+            return Err(DecoderError::SubscriptionTimeMismatch);
         }
 
         let curr_time = self.curr_time.get();
         if let Some(curr_time) = curr_time {
             if curr_time > timestamp {
-                return Err(DecoderError::FrameOutOfOrder(timestamp, curr_time));
+                return Err(DecoderError::FrameOutOfOrder);
             }
         }
 

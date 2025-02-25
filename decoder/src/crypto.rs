@@ -32,13 +32,13 @@ fn get_verifying_key() -> &'static VerifyingKey {
     })
 }
 
-/// This function allows main to bootstrap the OnceCell in crypto without
-/// needing to let the implementation details of it leaking.
+/// Allows main to bootstrap the OnceCell in crypto without needing to let the
+/// implementation details of it leaking.
 pub fn bootstrap_crypto() {
     let _ = get_verifying_key();
 }
 
-/// decrypts an encrypted packet in place given the key, nonce, and tag.
+/// Decrypts an encrypted packet in place given the key, nonce, and tag.
 pub fn decrypt_encrypted_packet(
     key: &Chacha20Key,
     nonce: &XChacha20Nonce,
@@ -57,7 +57,7 @@ pub fn decrypt_encrypted_packet(
         .or(Err(()))
 }
 
-/// decrypts an encrypted decoder packet in place given the nonce, and tag.
+/// Decrypts an encrypted decoder packet in place given the nonce, and tag.
 pub fn decrypt_decoder_encrypted_packet(
     nonce: &XChacha20Nonce,
     tag: &XChacha20Tag,

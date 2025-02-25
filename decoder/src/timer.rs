@@ -1,13 +1,13 @@
 use hal::pac::Tmr0;
 
-/// This is the clock speed of the Timer in Hz
+/// The clock speed of TMR0's clock in Hz
 const TIMER_RATE: u32 = 50_000_000;
 
 /// The total allowed transaction time if we detect that we're under attack, in
 /// microseconds. This is 5 seconds, per eCTF rules.
 const TRANSACTION_TIME_TICKS: u32 = 5 * TIMER_RATE;
 
-/// This type wraps the TMR0 peripheral on the board, allowing us to use it to
+/// Wrapper for the TMR0 peripheral on the board, allowing us to use it to
 /// wait for 5 seconds on a detected attack. It provides functions to start the
 /// timer, and to wait until it ends
 pub struct DecoderClock {

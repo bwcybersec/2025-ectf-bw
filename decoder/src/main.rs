@@ -88,6 +88,7 @@ fn main() -> ! {
     let flc = Flc::new(p.flc, clks.sys_clk);
 
     // Working with the flash needs the ICC disabled, so we ensure that here
+    // We don't need the perfomance boost anyways
     let mut icc = Icc::new(p.icc0);
     icc.disable();
 
@@ -108,11 +109,11 @@ fn main() -> ! {
         if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder, &mut led, &mut timer) {
             use DecoderError as DE;
             match err {
-                DE::FrameTooLarge(_)
-                | DE::NoSubscription(_)
-                | DE::SubscriptionTimeMismatch(_, _)
+                DE::FrameTooLarge
+                | DE::NoSubscription
+                | DE::SubscriptionTimeMismatch
                 | DE::FailedDecryption
-                | DE::FrameOutOfOrder(_, _)
+                | DE::FrameOutOfOrder
                 | DE::PacketWrongSize
                 | DE::InvalidCommand => {
                     // Security related errors, wait out the whole 5 seconds.
