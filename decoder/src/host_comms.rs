@@ -41,38 +41,23 @@ pub enum DecoderError {
     FrameOutOfOrder(u64, u64),
 }
 
-impl Display for DecoderError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::ExpectedAckButGot(byte) => {
-                write!(f, "Expected ACK but got unexpected byte {}", byte)
-            }
-            Self::NoMoreSubscriptionSpace => {
-                write!(f, "Attempted to add a subscription, but subscription space is full")
-            }
-            Self::FrameTooLarge(frame_size) => write!(f,
-                "Was asked to decode a frame of {}, which is larger than 64",
-                frame_size
-            ),
-            Self::NoSubscription(channel_id) => write!(f,
-                "Was asked to decode a frame for channel {}, but we have no subscription for that channel",
-                 channel_id
-            ),
-            Self::SubscriptionTimeMismatch(channel_id, timestamp) => write!(f,
-                "Was asked to decode a frame for channel {} with timestamp {}, but that timestamp is invalid for our subscription.", channel_id, timestamp
-            ),
-            Self::SerializationFailed(err) => write!(f, "Attempted to serialize subscription updates for flash, and failed with error {err}"),
-            Self::SavingFailed(err) => write!(f, "Attempted to save subscription updates to flash, and failed with error {err:?}"),
-            Self::FailedDecryption => write!(f, "Failed to decrypt a encrypted payload. This can mean that you used a subscription for a different decoder, or that data was corrupted or tampered with."),
-            Self::FrameOutOfOrder(timestamp, curr_time) => write!(f, "Was asked to decode a frame with timestamp {timestamp}, but have already decoded a frame with timestamp {curr_time}"),
-         }
-    }
-}
-
 impl DecoderError {
+    fn message(&self) -> &str {
+        match self {
+            Self::ExpectedAckButGot(byte) => "Expected ACK but got unexpected byte",
+            Self::NoMoreSubscriptionSpace => "Attempted to add a subscription, but subscription space is full",
+            Self::FrameTooLarge(frame_size) => "Was asked to decode a frame which is larger than 64 bytes",
+            Self::NoSubscription(channel_id) => "Was asked to decode a frame for channel that we have no subscription for",
+            Self::SubscriptionTimeMismatch(channel_id, timestamp) => "Was asked to decode a frame with timestamp thats invalid for our subscription.",
+            Self::SerializationFailed(err) => "Failed to serialize subscription updates for flash",
+            Self::SavingFailed(err) => "Failed to save subscriptions to flash",
+            Self::FailedDecryption => "Failed to decrypt a encrypted payload. This can mean that you used a subscription for a different decoder, or that your message was corrupted or tampered with.",
+            Self::FrameOutOfOrder(timestamp, curr_time) => "Was asked to decode a frame with timestamp in the past",
+        }
+    }
+
     pub fn write_to_console<RX, TX>(&self, console: &DecoderConsole<RX, TX>) {
-        let message = format!("{self}");
-        // heprintln!("{message}");
+        let message = self.message();
         let _ = console.print_debug(&message);
         let _ = console.print_error(&message);
     }
