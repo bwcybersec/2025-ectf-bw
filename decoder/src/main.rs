@@ -8,7 +8,6 @@ use crypto::bootstrap_crypto;
 use flash::DecoderStorage;
 use hal::flc::Flc;
 use hal::icc::Icc;
-use hal::pac::Gcr;
 use led::LED;
 
 pub extern crate max7800x_hal as hal;
