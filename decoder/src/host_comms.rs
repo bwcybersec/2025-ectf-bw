@@ -62,8 +62,8 @@ impl DecoderError {
     /// Write this error to a given console
     pub fn write_to_console<RX, TX>(&self, console: &DecoderConsole<RX, TX>) {
         let message = self.message();
-        let _ = console.print_debug(&message);
-        let _ = console.print_error(&message);
+        console.print_debug(message);
+        let _ = console.print_error(message);
     }
 }
 
@@ -134,7 +134,7 @@ impl<RX, TX> DecoderConsole<RX, TX> {
 
         self.write_u32(sub_count as u32);
 
-        let mut payload = DecoderPayloadWriter::new(&self);
+        let mut payload = DecoderPayloadWriter::new(self);
 
         for sub in subscriptions {
             payload.write_u32(sub.channel_id)?;
@@ -153,7 +153,7 @@ impl<RX, TX> DecoderConsole<RX, TX> {
     pub fn read_subscription(&self) -> Result<Subscription, DecoderError> {
         const SUBSCRIPTION_SIZE: usize = 4 + 8 + 8 + CHACHA20_KEY_BYTES;
 
-        let mut reader: DecoderPayloadReader<'_, RX, TX> = DecoderPayloadReader::new(&self);
+        let mut reader: DecoderPayloadReader<'_, RX, TX> = DecoderPayloadReader::new(self);
 
         let mut nonce: [u8; XCHACHA20_NONCE_BYTES] = Default::default();
         let mut tag: [u8; XCHACHA20_TAG_BYTES] = Default::default();
@@ -166,7 +166,7 @@ impl<RX, TX> DecoderConsole<RX, TX> {
         reader.read_bytes(&mut body);
         reader.finish_payload();
 
-        if let Err(_) = decrypt_decoder_encrypted_packet(&nonce, &tag, &signature, &mut body) {
+        if decrypt_decoder_encrypted_packet(&nonce, &tag, &signature, &mut body).is_err() {
             return Err(DecoderError::FailedDecryption);
         };
 
@@ -189,7 +189,7 @@ impl<RX, TX> DecoderConsole<RX, TX> {
     /// Reads a Decode Frame packet off the wire, extracting the fields for the
     /// crypto header, decrypts it, then writes the resulting frame back out.
     pub fn decode_frame(&self, decoder: &Decoder, packet_length: u16) -> Result<(), DecoderError> {
-        let mut reader: DecoderPayloadReader<'_, RX, TX> = DecoderPayloadReader::new(&self);
+        let mut reader: DecoderPayloadReader<'_, RX, TX> = DecoderPayloadReader::new(self);
         // 4 bytes for the channel ID, 8 bytes for the timestamp, a crypto header
         let frame_length = packet_length - 4 - 8 - (ENCODER_CRYPTO_HEADER_LEN) as u16;
 
@@ -223,8 +223,8 @@ impl<RX, TX> DecoderConsole<RX, TX> {
 
         self.read_ack()?;
 
-        let mut writer: DecoderPayloadWriter<'_, RX, TX> = DecoderPayloadWriter::new(&self);
-        writer.write_bytes(&frame)?;
+        let mut writer: DecoderPayloadWriter<'_, RX, TX> = DecoderPayloadWriter::new(self);
+        writer.write_bytes(frame)?;
         writer.finish_payload()?;
 
         Ok(())
@@ -254,7 +254,7 @@ impl<RX, TX> DecoderConsole<RX, TX> {
 
         self.read_ack()?;
 
-        let mut payload = DecoderPayloadWriter::new(&self);
+        let mut payload = DecoderPayloadWriter::new(self);
         payload.write_bytes(message)?;
         payload.finish_payload()?;
 
@@ -372,8 +372,8 @@ impl<'a, RX, TX> DecoderPayloadReader<'a, RX, TX> {
     }
 
     fn read_bytes(&mut self, bytes: &mut [u8]) {
-        for i in 0..bytes.len() {
-            bytes[i] = self.read_byte()
+        for byte in bytes.iter_mut() {
+            *byte = self.read_byte();
         }
     }
 

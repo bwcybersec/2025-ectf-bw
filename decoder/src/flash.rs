@@ -1,6 +1,13 @@
-use hal::flc::{FlashError, Flc};
+use hal::{
+    flc::{FlashError, Flc},
+    trng::Trng,
+};
+use zeroize::Zeroize;
 
-use crate::host_comms::DecoderError;
+use crate::{
+    crypto::{decrypt_flash_buffer, encrypt_flash_buffer, XChacha20Nonce, XChacha20Tag},
+    host_comms::DecoderError,
+};
 
 use core::fmt::Debug;
 
@@ -9,7 +16,12 @@ pub const STORAGE_MAX_U32: u32 = STORAGE_MAX as u32;
 
 const PERSIST_BASE_ADDR: u32 = 0x10044000;
 const DATA_LEN_ADDR: u32 = PERSIST_BASE_ADDR + 4;
-const DATA_BASE_ADDR: u32 = DATA_LEN_ADDR + 4;
+
+// Skip over 3 128-bit blocks,
+// one for the magic, length, and high 2 u32s of the nonce
+// one for the rest of the nonce
+// one for the MAC tag
+const DATA_BASE_ADDR: u32 = PERSIST_BASE_ADDR + (16 * 3);
 
 const FLASH_INITIALIZED_MAGIC: u32 = 0x4d696b75;
 
@@ -33,6 +45,9 @@ pub enum DecoderStorageWriteError {
     /// Got an error from the flash library.
     /// This is probably a logic bug.
     FlashError,
+    /// Got an error encrypting the flash
+    /// This is also probably a logic bug.
+    CryptoError,
 }
 
 impl From<FlashError> for DecoderStorageWriteError {
@@ -48,6 +63,7 @@ impl From<DecoderStorageWriteError> for DecoderError {
 }
 pub struct DecoderStorage {
     flc: Flc,
+    trng: Trng,
     buf: heapless::Vec<u8, STORAGE_MAX>,
 }
 
@@ -60,9 +76,10 @@ impl Debug for DecoderStorage {
 }
 
 impl DecoderStorage {
-    pub fn init(flc: Flc) -> Result<DecoderStorage, DecoderStorageReadError> {
+    pub fn init(flc: Flc, trng: Trng) -> Result<DecoderStorage, DecoderStorageReadError> {
         let mut storage = Self {
             flc,
+            trng,
             buf: heapless::Vec::new(),
         };
 
@@ -91,6 +108,7 @@ impl DecoderStorage {
             PERSIST_BASE_ADDR,
             &[FLASH_INITIALIZED_MAGIC, 0, 0xFFFFFFFF, 0xFFFFFFFF],
         )?;
+        self.buf.zeroize();
         self.buf.clear();
         Ok(())
     }
@@ -125,28 +143,98 @@ impl DecoderStorage {
                     .read_32(cursor)
                     .expect("STORAGE_MAX is less than the page size");
                 let read_bytes = &read.to_ne_bytes()[0..bytes_left];
-                match self.buf.extend_from_slice(read_bytes) {
-                    Ok(_) => {}
-                    Err(_) => {}
-                };
+
+                if self.buf.extend_from_slice(read_bytes).is_err() {
+                    return Err(DecoderStorageReadError::FlashLengthTooLarge);
+                }
                 break;
             }
         }
 
+        // Read in the nonce and tag from the header blocks
+        // This code is ugly. I wrote it on Wednesday. Sorry.
+        let mut nonce: XChacha20Nonce = Default::default();
+        let mut tag: XChacha20Tag = Default::default();
+
+        let header_block = self.flc.read_128(PERSIST_BASE_ADDR)?;
+        nonce[0..4].copy_from_slice(&header_block[2].to_ne_bytes());
+        nonce[4..8].copy_from_slice(&header_block[3].to_ne_bytes());
+
+        let nonce_block = self.flc.read_128(PERSIST_BASE_ADDR + 16)?;
+        nonce[8..12].copy_from_slice(&nonce_block[0].to_ne_bytes());
+        nonce[12..16].copy_from_slice(&nonce_block[1].to_ne_bytes());
+        nonce[16..20].copy_from_slice(&nonce_block[2].to_ne_bytes());
+        nonce[20..24].copy_from_slice(&nonce_block[3].to_ne_bytes());
+
+        let tag_block = self.flc.read_128(PERSIST_BASE_ADDR + 32)?;
+        tag[0..4].copy_from_slice(&tag_block[0].to_ne_bytes());
+        tag[4..8].copy_from_slice(&tag_block[1].to_ne_bytes());
+        tag[8..12].copy_from_slice(&tag_block[2].to_ne_bytes());
+        tag[12..16].copy_from_slice(&tag_block[3].to_ne_bytes());
+
+        match decrypt_flash_buffer(&mut self.buf, &nonce, &tag) {
+            Ok(_) => {}
+            Err(_) => {
+                // We failed to decrypt the buffer? Assume that something
+                // nefarious is going on and wipe it clean.
+                self.buf.zeroize();
+                self.buf.clear();
+            }
+        };
         Ok(())
     }
 
     /// Write the buffer out to flash, in the expected format.
-    pub fn flush_buffer(&self) -> Result<(), DecoderStorageWriteError> {
+    /// This clobbers the buffer with the encrypted version in the process.
+    pub fn flush_buffer(&mut self) -> Result<(), DecoderStorageWriteError> {
         self.erase_page();
 
-        let mut cursor = PERSIST_BASE_ADDR;
+        let (nonce, tag) = encrypt_flash_buffer(&mut self.buf, &mut self.trng)
+            .or(Err(DecoderStorageWriteError::CryptoError))?;
+
+        // Grab the high u32s of the nonce
+        let high_nonce_1 = u32::from_ne_bytes(nonce[0..4].try_into().expect("4==4"));
+        let high_nonce_2 = u32::from_ne_bytes(nonce[4..8].try_into().expect("4==4"));
+
+        // Write the first 128 bits of flash.
+        //
         // Don't write the initialized magic here. This avoids a race condition
         // where the power could be pulled mid-write, which hypothetically could
         // lead to a channel key being set to all FF.
-        let mut u32s_to_write = [0xFFFFFFFF, self.buf.len() as u32, 0xDEADBEEF, 0xDEADBEEF];
+        self.flc.write_128(
+            PERSIST_BASE_ADDR,
+            &[
+                0xFFFFFFFF,
+                self.buf.len() as u32,
+                high_nonce_1,
+                high_nonce_2,
+            ],
+        )?;
 
-        let mut i: usize = 2;
+        // Write the second 128 bits of flash.
+        // This is just the nonce.
+        let low_nonce_1 = u32::from_ne_bytes(nonce[8..12].try_into().expect("4==4"));
+        let low_nonce_2 = u32::from_ne_bytes(nonce[12..16].try_into().expect("4==4"));
+        let low_nonce_3 = u32::from_ne_bytes(nonce[16..20].try_into().expect("4==4"));
+        let low_nonce_4 = u32::from_ne_bytes(nonce[20..24].try_into().expect("4==4"));
+
+        self.flc.write_128(
+            PERSIST_BASE_ADDR + 16,
+            &[low_nonce_1, low_nonce_2, low_nonce_3, low_nonce_4],
+        )?;
+
+        // Write the third 128 bits of flash
+        // This is the MAC tag for the encryption.
+        let tag_1 = u32::from_ne_bytes(tag[0..4].try_into().expect("4==4"));
+        let tag_2 = u32::from_ne_bytes(tag[4..8].try_into().expect("4==4"));
+        let tag_3 = u32::from_ne_bytes(tag[8..12].try_into().expect("4==4"));
+        let tag_4 = u32::from_ne_bytes(tag[12..16].try_into().expect("4==4"));
+        self.flc
+            .write_128(PERSIST_BASE_ADDR + 32, &[tag_1, tag_2, tag_3, tag_4])?;
+
+        let mut u32s_to_write = [0; 4];
+        let mut cursor = DATA_BASE_ADDR;
+        let mut i: usize = 0;
 
         let chunks = self.buf.array_chunks::<4>();
         let remainder = chunks.remainder();
@@ -163,7 +251,7 @@ impl DecoderStorage {
             }
         }
 
-        let mut final_u32: [u8; 4] = [0x41; 4];
+        let mut final_u32: [u8; 4] = [0xFF; 4];
 
         for (i, b) in final_u32.iter_mut().zip(remainder) {
             *i = *b;
@@ -175,6 +263,11 @@ impl DecoderStorage {
         // we finished writing the flash, now write the flash initialized magic :)
         self.flc
             .write_32(PERSIST_BASE_ADDR, FLASH_INITIALIZED_MAGIC)?;
+
+        // zeroize and clear the buffer, no one is using it.
+        self.buf.zeroize();
+        self.buf.clear();
+
         Ok(())
     }
 

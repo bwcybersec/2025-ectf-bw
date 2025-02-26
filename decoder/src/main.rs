@@ -8,7 +8,7 @@ use crypto::bootstrap_crypto;
 use flash::DecoderStorage;
 use hal::flc::Flc;
 use hal::icc::Icc;
-use led::LED;
+use led::Led;
 
 pub extern crate max7800x_hal as hal;
 use decoder::Decoder;
@@ -62,7 +62,7 @@ fn main() -> ! {
     led_b.set_power_vddioh();
 
     // Set up our abstraction around the LED
-    let mut led = LED::new(led_r, led_g, led_b);
+    let mut led = Led::new(led_r, led_g, led_b);
 
     // Set light red: Initializing
     led.red();
@@ -74,8 +74,11 @@ fn main() -> ! {
     let mut icc = Icc::new(p.icc0);
     icc.disable();
 
+    // Create a new TRNG peripheral instance
+    let trng = hal::trng::Trng::new(p.trng, &mut gcr.reg);
+
     // Initialize our types
-    let mut storage = DecoderStorage::init(flc).unwrap();
+    let mut storage = DecoderStorage::init(flc, trng).unwrap();
     let mut decoder = Decoder::new(&mut storage);
     let mut console = DecoderConsole(uart);
 
