@@ -25,7 +25,7 @@ pub enum DecoderError {
     FrameTooLarge,
     /// Decoder does not have a valid subscription for the given channel.
     NoSubscription,
-    /// Given timestamp does fall within the subscription time window.
+    /// Given timestamp does not fall within the subscription time window.
     SubscriptionTimeMismatch,
     /// Serialization failed while trying to write subscription update to flash.
     SerializationFailed,
@@ -33,11 +33,11 @@ pub enum DecoderError {
     SavingFailed,
     /// Failed to decrypt an encrypted payload.
     FailedDecryption,
-    /// Recieved a frame from the past. We refuse to replay it.
+    /// Received a frame from the past. We refuse to replay it.
     FrameOutOfOrder,
-    /// Recieved a packet which should have a consistent size that had a different size
+    /// Received a packet which should have a consistent size that had a different size
     PacketWrongSize,
-    /// Recieved a packet with an invalid command byte.
+    /// Received a packet with an invalid command byte.
     InvalidCommand,
 }
 

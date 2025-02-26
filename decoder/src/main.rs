@@ -9,9 +9,7 @@ use flash::DecoderStorage;
 use hal::flc::Flc;
 use hal::icc::Icc;
 use hal::pac::Gcr;
-use host_comms::DecoderError;
 use led::LED;
-use timer::DecoderClock;
 
 pub extern crate max7800x_hal as hal;
 use decoder::Decoder;
@@ -28,7 +26,6 @@ mod decoder;
 mod flash;
 mod host_comms;
 mod led;
-mod timer;
 
 #[entry]
 fn main() -> ! {
@@ -42,20 +39,6 @@ fn main() -> ! {
         .set_source(&mut gcr.reg, &ipo)
         .set_divider::<hal::gcr::clocks::Div1>(&mut gcr.reg)
         .freeze();
-
-    // Enable the TMR0 clock
-    // Safety:
-    // There is no HAL implementation of TMR0.
-    // No other code enables or disables the TMR0 clock.
-    // We're in a critical section, so nothing else can modify the GCR
-    // We drop the stolen GCR at the end of this scope
-    unsafe {
-        critical_section::with(|_cs| {
-            let stolen_gcr = Gcr::steal();
-            stolen_gcr.pclkdis0().modify(|_, w| w.tmr0().clear_bit());
-            drop(stolen_gcr);
-        });
-    };
 
     // Initialize and split the GPIO0 peripheral into pins
     let gpio0_pins = hal::gpio::Gpio0::new(p.gpio0, &mut gcr.reg).split();
@@ -93,7 +76,6 @@ fn main() -> ! {
     icc.disable();
 
     // Initialize our types
-    let mut timer = DecoderClock::new(p.tmr0);
     let mut storage = DecoderStorage::init(flc).unwrap();
     let mut decoder = Decoder::new(&mut storage);
     let mut console = DecoderConsole(uart);
@@ -106,24 +88,7 @@ fn main() -> ! {
         // Set light green: Ready!
         led.green();
 
-        if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder, &mut led, &mut timer) {
-            use DecoderError as DE;
-            match err {
-                DE::FrameTooLarge
-                | DE::NoSubscription
-                | DE::SubscriptionTimeMismatch
-                | DE::FailedDecryption
-                | DE::FrameOutOfOrder
-                | DE::PacketWrongSize
-                | DE::InvalidCommand => {
-                    // Security related errors, wait out the whole 5 seconds.
-                    led.red();
-                    timer.wait_for_max_transaction_time();
-                }
-                _ => {
-                    // Non security related errors
-                }
-            }
+        if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder, &mut led) {
             err.write_to_console(&console);
         }
     }

@@ -18,7 +18,6 @@ pub fn run_command<RX, TX>(
     console: &mut DecoderConsole<RX, TX>,
     decoder: &mut Decoder,
     led: &mut LED,
-    clock: &mut DecoderClock,
 ) -> Result<(), DecoderError> {
     let hdr = console.read_command_header();
     // We read the header, transaction time starts now.
