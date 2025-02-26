@@ -22,3 +22,5 @@ ensures that a pirate subscription cannot be decrypted by a given decoder.
 of all encrypted payloads. This ensures that, even if a channel key or decoder
 key were to leak, the decoder can ensure that a message came from the genuine
 encoder.
+
+\newpage
