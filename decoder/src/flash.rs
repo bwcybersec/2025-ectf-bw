@@ -15,9 +15,9 @@ const FLASH_INITIALIZED_MAGIC: u32 = 0x4d696b75;
 
 #[derive(Debug)]
 pub enum DecoderStorageReadError {
-    /// This Error implies that the length value in flash is invalid,
+    /// The length value in flash is invalid,
     FlashLengthTooLarge,
-    /// This error means that we got an error from the flash library.
+    /// Got an error from the flash library.
     /// This is probably a logic bug.
     FlashError,
 }
@@ -30,7 +30,7 @@ impl From<FlashError> for DecoderStorageReadError {
 
 #[derive(Debug)]
 pub enum DecoderStorageWriteError {
-    /// This error means that we got an error from the flash library.
+    /// Got an error from the flash library.
     /// This is probably a logic bug.
     FlashError,
 }
@@ -42,8 +42,8 @@ impl From<FlashError> for DecoderStorageWriteError {
 }
 
 impl From<DecoderStorageWriteError> for DecoderError {
-    fn from(value: DecoderStorageWriteError) -> Self {
-        Self::SavingFailed(value)
+    fn from(_: DecoderStorageWriteError) -> Self {
+        Self::SavingFailed
     }
 }
 pub struct DecoderStorage {
@@ -51,6 +51,8 @@ pub struct DecoderStorage {
     buf: heapless::Vec<u8, STORAGE_MAX>,
 }
 
+/// When debugging, we don't want the entire formatted 1024 byte buffer to be
+/// sent over the (probably slow/memory constrained) protocol that we're using.
 impl Debug for DecoderStorage {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("DecoderStorage").finish_non_exhaustive()
@@ -81,6 +83,8 @@ impl DecoderStorage {
         Ok(storage)
     }
 
+    /// Reset the flash so that next time that we read state in, we get an empty
+    /// buffer.
     pub fn reset_storage(&mut self) -> Result<(), DecoderStorageWriteError> {
         self.erase_page();
         self.flc.write_128(
@@ -91,6 +95,7 @@ impl DecoderStorage {
         Ok(())
     }
 
+    /// Fill the buffer in RAM using the contents of the flash.
     pub fn fill_buffer(&mut self) -> Result<(), DecoderStorageReadError> {
         let length = self.flc.read_32(DATA_LEN_ADDR).unwrap();
         if length > STORAGE_MAX_U32 {
@@ -131,6 +136,7 @@ impl DecoderStorage {
         Ok(())
     }
 
+    /// Write the buffer out to flash, in the expected format.
     pub fn flush_buffer(&self) -> Result<(), DecoderStorageWriteError> {
         self.erase_page();
 

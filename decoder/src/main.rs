@@ -4,7 +4,6 @@
 // case.
 #![feature(array_chunks)]
 
-extern crate alloc;
 use crypto::bootstrap_crypto;
 use flash::DecoderStorage;
 use hal::flc::Flc;
@@ -13,8 +12,6 @@ use hal::pac::Gcr;
 use host_comms::DecoderError;
 use led::LED;
 use timer::DecoderClock;
-
-use core::ptr::addr_of_mut;
 
 pub extern crate max7800x_hal as hal;
 use decoder::Decoder;
@@ -25,8 +22,6 @@ use host_comms::DecoderConsole;
 
 use panic_halt as _;
 
-use embedded_alloc::LlffHeap as Heap;
-
 mod cmd_logic;
 mod crypto;
 mod decoder;
@@ -35,19 +30,8 @@ mod host_comms;
 mod led;
 mod timer;
 
-#[global_allocator]
-static HEAP: Heap = Heap::empty();
-
 #[entry]
 fn main() -> ! {
-    // Allocate a very silly 4k of heap for formatting error and debug strings :)
-    {
-        use core::mem::MaybeUninit;
-        const HEAP_SIZE: usize = 4096;
-        static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
-        unsafe { HEAP.init(addr_of_mut!(HEAP_MEM) as usize, HEAP_SIZE) }
-    }
-
     let p = pac::Peripherals::take().unwrap();
 
     // Set the system clock to the IPO
@@ -104,6 +88,7 @@ fn main() -> ! {
     let flc = Flc::new(p.flc, clks.sys_clk);
 
     // Working with the flash needs the ICC disabled, so we ensure that here
+    // We don't need the perfomance boost anyways
     let mut icc = Icc::new(p.icc0);
     icc.disable();
 
@@ -124,11 +109,13 @@ fn main() -> ! {
         if let Err(err) = cmd_logic::run_command(&mut console, &mut decoder, &mut led, &mut timer) {
             use DecoderError as DE;
             match err {
-                DE::FrameTooLarge(_)
-                | DE::NoSubscription(_)
-                | DE::SubscriptionTimeMismatch(_, _)
+                DE::FrameTooLarge
+                | DE::NoSubscription
+                | DE::SubscriptionTimeMismatch
                 | DE::FailedDecryption
-                | DE::FrameOutOfOrder(_, _) => {
+                | DE::FrameOutOfOrder
+                | DE::PacketWrongSize
+                | DE::InvalidCommand => {
                     // Security related errors, wait out the whole 5 seconds.
                     led.red();
                     timer.wait_for_max_transaction_time();

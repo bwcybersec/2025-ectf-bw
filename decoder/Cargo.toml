@@ -15,7 +15,6 @@ embedded-io = "0.6.1"
 max7800x-hal = { version = "0.6.1", features = ["flashprog-linkage"] }
 panic-halt = "1.0.0"
 rand = { version = "0.8.5", default-features = false }
-embedded-alloc = "0.6"
 heapless = "0.8"
 postcard = "1.0"
 serde = { version = "1.0.*", default-features = false }
