@@ -143,10 +143,10 @@ impl DecoderStorage {
                     .read_32(cursor)
                     .expect("STORAGE_MAX is less than the page size");
                 let read_bytes = &read.to_ne_bytes()[0..bytes_left];
-                match self.buf.extend_from_slice(read_bytes) {
-                    Ok(_) => {}
-                    Err(_) => {}
-                };
+
+                if self.buf.extend_from_slice(read_bytes).is_err() {
+                    return Err(DecoderStorageReadError::FlashLengthTooLarge);
+                }
                 break;
             }
         }
@@ -157,20 +157,20 @@ impl DecoderStorage {
         let mut tag: XChacha20Tag = Default::default();
 
         let header_block = self.flc.read_128(PERSIST_BASE_ADDR)?;
-        (&mut nonce[0..4]).copy_from_slice(&header_block[2].to_ne_bytes());
-        (&mut nonce[4..8]).copy_from_slice(&header_block[3].to_ne_bytes());
+        nonce[0..4].copy_from_slice(&header_block[2].to_ne_bytes());
+        nonce[4..8].copy_from_slice(&header_block[3].to_ne_bytes());
 
         let nonce_block = self.flc.read_128(PERSIST_BASE_ADDR + 16)?;
-        (&mut nonce[8..12]).copy_from_slice(&nonce_block[0].to_ne_bytes());
-        (&mut nonce[12..16]).copy_from_slice(&nonce_block[1].to_ne_bytes());
-        (&mut nonce[16..20]).copy_from_slice(&nonce_block[2].to_ne_bytes());
-        (&mut nonce[20..24]).copy_from_slice(&nonce_block[3].to_ne_bytes());
+        nonce[8..12].copy_from_slice(&nonce_block[0].to_ne_bytes());
+        nonce[12..16].copy_from_slice(&nonce_block[1].to_ne_bytes());
+        nonce[16..20].copy_from_slice(&nonce_block[2].to_ne_bytes());
+        nonce[20..24].copy_from_slice(&nonce_block[3].to_ne_bytes());
 
         let tag_block = self.flc.read_128(PERSIST_BASE_ADDR + 32)?;
-        (&mut tag[0..4]).copy_from_slice(&tag_block[0].to_ne_bytes());
-        (&mut tag[4..8]).copy_from_slice(&tag_block[1].to_ne_bytes());
-        (&mut tag[8..12]).copy_from_slice(&tag_block[2].to_ne_bytes());
-        (&mut tag[12..16]).copy_from_slice(&tag_block[3].to_ne_bytes());
+        tag[0..4].copy_from_slice(&tag_block[0].to_ne_bytes());
+        tag[4..8].copy_from_slice(&tag_block[1].to_ne_bytes());
+        tag[8..12].copy_from_slice(&tag_block[2].to_ne_bytes());
+        tag[12..16].copy_from_slice(&tag_block[3].to_ne_bytes());
 
         match decrypt_flash_buffer(&mut self.buf, &nonce, &tag) {
             Ok(_) => {}

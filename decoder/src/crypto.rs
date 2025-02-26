@@ -1,6 +1,4 @@
-use chacha20poly1305::{
-    aead::AeadMutInPlace, KeyInit, XChaCha20Poly1305,
-};
+use chacha20poly1305::{aead::AeadMutInPlace, KeyInit, XChaCha20Poly1305};
 use ed25519_dalek::{Signature, VerifyingKey};
 use hal::trng::Trng;
 use once_cell::sync::OnceCell;
@@ -51,13 +49,16 @@ pub fn decrypt_encrypted_packet(
     body: &mut [u8],
 ) -> Result<(), ()> {
     let mut cipher = XChaCha20Poly1305::new(key.into());
-    if let Err(_) = cipher.decrypt_in_place_detached(nonce.into(), &[], body, tag.into()) {
+    if cipher
+        .decrypt_in_place_detached(nonce.into(), &[], body, tag.into())
+        .is_err()
+    {
         // Failed to decrypt
         return Err(());
     }
 
     get_verifying_key()
-        .verify_strict(&body, &Signature::from_bytes(signature))
+        .verify_strict(body, &Signature::from_bytes(signature))
         .or(Err(()))
 }
 

@@ -2,7 +2,7 @@ use crate::{
     crypto::{CHACHA20_KEY_BYTES, ENCODER_CRYPTO_HEADER_LEN},
     decoder::Decoder,
     host_comms::{DecoderConsole, DecoderError, DecoderMessageType},
-    led::LED,
+    led::Led,
 };
 
 // 4 for channel number
@@ -16,7 +16,7 @@ const SUBSCRIPTION_MESSAGE_SIZE: u16 =
 pub fn run_command<RX, TX>(
     console: &mut DecoderConsole<RX, TX>,
     decoder: &mut Decoder,
-    led: &mut LED,
+    led: &mut Led,
 ) -> Result<(), DecoderError> {
     let hdr = console.read_command_header();
     // We read the header, transaction time starts now.
@@ -53,7 +53,7 @@ pub fn run_command<RX, TX>(
                 DecoderMessageType::Decode => {
                     led.magenta();
 
-                    console.decode_frame(&decoder, hdr.size)?;
+                    console.decode_frame(decoder, hdr.size)?;
                 }
             }
         }

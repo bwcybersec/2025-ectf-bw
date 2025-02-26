@@ -32,10 +32,7 @@ impl<'a> Decoder<'a> {
 
             // Deserialize subscriptions
             let subscriptions: [Option<Subscription>; MAX_SUBSCRIPTION_COUNT] =
-                match from_bytes(buf) {
-                    Ok(res) => res,
-                    Err(_) => Default::default(),
-                };
+                from_bytes(buf).unwrap_or_default();
 
             // zeroize and clear the buffer, no one is using it after us.
             buf.zeroize();
@@ -83,8 +80,7 @@ impl<'a> Decoder<'a> {
         self.subscriptions
             .iter()
             .flatten()
-            .filter(|s| s.channel_id == channel_id)
-            .next()
+            .find(|s| s.channel_id == channel_id)
     }
 
     fn flush_subscriptions(&mut self) -> Result<(), DecoderError> {
@@ -143,7 +139,7 @@ impl<'a> Decoder<'a> {
 
         let curr_time = self.curr_time.get();
         if let Some(curr_time) = curr_time {
-            if !(curr_time < timestamp) {
+            if curr_time >= timestamp {
                 return Err(DecoderError::FrameOutOfOrder);
             }
         }
