@@ -1,12 +1,10 @@
 use chacha20poly1305::{
-    aead::AeadMutInPlace, ChaCha20Poly1305, ChaChaPoly1305, KeyInit, XChaCha20Poly1305,
+    aead::AeadMutInPlace, KeyInit, XChaCha20Poly1305,
 };
 use ed25519_dalek::{Signature, VerifyingKey};
 use hal::trng::Trng;
 use once_cell::sync::OnceCell;
 use rand::RngCore;
-
-use crate::{flash, host_comms::DecoderError};
 
 // Encryption
 pub const CHACHA20_KEY_BYTES: usize = 32;
