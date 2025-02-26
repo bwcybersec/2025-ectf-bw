@@ -1,6 +1,12 @@
-use chacha20poly1305::{aead::AeadMutInPlace, KeyInit, XChaCha20Poly1305};
+use chacha20poly1305::{
+    aead::AeadMutInPlace, ChaCha20Poly1305, ChaChaPoly1305, KeyInit, XChaCha20Poly1305,
+};
 use ed25519_dalek::{Signature, VerifyingKey};
+use hal::trng::Trng;
 use once_cell::sync::OnceCell;
+use rand::RngCore;
+
+use crate::{flash, host_comms::DecoderError};
 
 // Encryption
 pub const CHACHA20_KEY_BYTES: usize = 32;
@@ -65,4 +71,34 @@ pub fn decrypt_decoder_encrypted_packet(
     body: &mut [u8],
 ) -> Result<(), ()> {
     decrypt_encrypted_packet(&DECODER_KEY, nonce, tag, signature, body)
+}
+
+/// Encrypts the flash buffer.
+///
+/// Returns a tuple of the nonce and the tag
+pub fn encrypt_flash_buffer(
+    buffer: &mut [u8],
+    trng: &mut Trng,
+) -> Result<(XChacha20Nonce, XChacha20Tag), ()> {
+    let mut cipher = XChaCha20Poly1305::new((&FLASH_KEY).into());
+    let mut nonce: XChacha20Nonce = Default::default();
+    trng.fill_bytes(&mut nonce);
+
+    match cipher.encrypt_in_place_detached(&nonce.into(), &[], buffer) {
+        Ok(tag) => Ok((nonce, tag.into())),
+        Err(_) => Err(()),
+    }
+}
+
+// Decrypts the flash buffer
+pub fn decrypt_flash_buffer(
+    buffer: &mut [u8],
+    nonce: &XChacha20Nonce,
+    tag: &XChacha20Tag,
+) -> Result<(), ()> {
+    let mut cipher = XChaCha20Poly1305::new((&FLASH_KEY).into());
+
+    cipher
+        .decrypt_in_place_detached(nonce.into(), &[], buffer, tag.into())
+        .or(Err(()))
 }

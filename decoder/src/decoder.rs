@@ -2,6 +2,7 @@ use core::cell::Cell;
 
 use postcard::{from_bytes, to_extend};
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroize;
 
 use crate::{
     crypto::{
@@ -28,11 +29,17 @@ impl<'a> Decoder<'a> {
 
         {
             let buf = storage.get_buf_mut();
+
+            // Deserialize subscriptions
             let subscriptions: [Option<Subscription>; MAX_SUBSCRIPTION_COUNT] =
                 match from_bytes(buf) {
                     Ok(res) => res,
                     Err(_) => Default::default(),
                 };
+
+            // zeroize and clear the buffer, no one is using it after us.
+            buf.zeroize();
+            buf.clear();
 
             decoder = Self {
                 subscriptions,

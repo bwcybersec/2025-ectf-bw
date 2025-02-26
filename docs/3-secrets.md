@@ -23,4 +23,7 @@ of all encrypted payloads. This ensures that, even if a channel key or decoder
 key were to leak, the decoder can ensure that a message came from the genuine
 encoder.
 
+- Flash Key - this key is generated randomly each time a decoder is compiled.
+It is used to encrypt the subscription data stored on the flash of the decoder.
+
 \newpage

@@ -74,8 +74,11 @@ fn main() -> ! {
     let mut icc = Icc::new(p.icc0);
     icc.disable();
 
+    // Create a new TRNG peripheral instance
+    let trng = hal::trng::Trng::new(p.trng, &mut gcr.reg);
+
     // Initialize our types
-    let mut storage = DecoderStorage::init(flc).unwrap();
+    let mut storage = DecoderStorage::init(flc, trng).unwrap();
     let mut decoder = Decoder::new(&mut storage);
     let mut console = DecoderConsole(uart);
 
