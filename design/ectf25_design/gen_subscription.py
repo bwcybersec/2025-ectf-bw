@@ -36,17 +36,11 @@ def gen_subscription(
     :param end: Last timestamp the subscription is valid for
     :param channel: Channel to enable
     """
-    # TODO: Update this function to provide a Decoder with whatever data it needs to
-    #   subscribe to a new channel
 
     # Load the json of the secrets file
     secrets = json.loads(secrets)
 
-    # You can use secrets generated using `gen_secrets` here like:
-    # secrets["some_secrets"]
-    # Which would return "EXAMPLE" in the reference design.
-    # Please note that the secrets are READ ONLY at this sage!
-
+    # Parse secrets out of the json file.
     deployment_key = bytes.fromhex(secrets["deployment_key"])
     device_id_bytes = device_id.to_bytes(4)
     salt = bytes.fromhex(secrets["salt"])

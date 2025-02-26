@@ -13,29 +13,14 @@ WORKDIR /root
 # Install Requisite Packages
 # do this first because it takes the longest
 RUN apt-get update && apt-get upgrade -y && apt-get install -y \
-    gdb \
-    gdb-multiarch \
-    gcc-arm-none-eabi \
-    binutils-arm-none-eabi \
-    make \
-    python3.10 \
-    git \
     curl \
-    libtool \
-    texinfo \
-    unzip \
-    python-is-python3
-
+    gcc
 
 # BW: Setup rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2025-01-27 -t thumbv7em-none-eabihf -c llvm-tools && \
     . "$HOME/.cargo/env" && \
     echo '. "$HOME/.cargo/env"' >> $HOME/.bashrc && \
     cargo install cargo-binutils
-
-# BW: Setup GEF
-RUN bash -c "$(curl -fsSL https://gef.blah.cat/sh)"
-
 WORKDIR /decoder
 
 # ENTRYPOINT ["bash", "-c", "make release DECODER_ID=${DECODER_ID} && cp build/max78000.elf build/max78000.bin /out"]

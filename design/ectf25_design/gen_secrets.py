@@ -43,7 +43,6 @@ def gen_secrets(channels: list[int]) -> bytes:
     # The secrets file will never be shared with attackers
 
     secrets = {
-        "channels": channels,
         "deployment_key": os.urandom(32).hex(),
         "channel_0_key": os.urandom(32).hex(),
         "channel_keys": {channel: os.urandom(32).hex() for channel in channels},
